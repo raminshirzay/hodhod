@@ -56,14 +56,13 @@ export const AGICompanionPage: React.FC = () => {
     setIsTyping(true);
 
     try {
-      const response = await fetch('/api/ai/chat', {
+      const response = await fetch('/api/agi/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           message: newMessage,
-          chatId: 'agi-companion',
           userId: user?.id,
           personality: companionPersonality
         })

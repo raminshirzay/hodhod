@@ -13,6 +13,10 @@ export function agiRouter(db: Database) {
       const history = await db.getAGIHistory(userId, 10);
       
       const apiKey = await db.getSetting('openrouter_api_key');
+      if (!apiKey) {
+        return res.status(500).json({ message: 'AI service not configured' });
+      }
+
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -52,6 +56,7 @@ export function agiRouter(db: Database) {
         throw new Error('AI service error');
       }
     } catch (error) {
+      console.error('AGI chat error:', error);
       res.status(500).json({ message: 'AGI chat failed' });
     }
   });

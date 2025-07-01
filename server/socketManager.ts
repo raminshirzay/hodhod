@@ -2,6 +2,11 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { Database } from './database.js';
 
+interface SocketWithUser extends Socket {
+  userId?: number;
+  username?: string;
+}
+
 export class SocketManager {
   private io: Server;
   private db: Database;
@@ -15,7 +20,7 @@ export class SocketManager {
   }
 
   private setupSocketHandlers() {
-    this.io.on('connection', (socket) => {
+    this.io.on('connection', (socket: SocketWithUser) => {
       console.log('User connected:', socket.id);
 
       // Authentication
@@ -83,11 +88,11 @@ export class SocketManager {
           
           // Check if AI should respond
           if (messageData.type === 'text' && !messageData.content.startsWith('/')) {
-            await this.handleAIResponse(messageData.chatId, messageData.content, socket.userId);
+            await this.handleAIResponse(messageData.chatId, messageData.content, socket.userId!);
           }
           
           // Check for digital twin responses
-          await this.handleTwinResponses(messageData.chatId, messageData.content, socket.userId);
+          await this.handleTwinResponses(messageData.chatId, messageData.content, socket.userId!);
           
         } catch (error) {
           socket.emit('message_error', { message: 'Failed to send message' });
