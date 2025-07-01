@@ -50,6 +50,7 @@ export class SocketManager {
             console.log(`User ${user.username} authenticated`);
           }
         } catch (error) {
+          console.error('Authentication error:', error);
           socket.emit('auth_error', { message: 'Invalid token' });
         }
       });
@@ -95,6 +96,7 @@ export class SocketManager {
           await this.handleTwinResponses(messageData.chatId, messageData.content, socket.userId!);
           
         } catch (error) {
+          console.error('Send message error:', error);
           socket.emit('message_error', { message: 'Failed to send message' });
         }
       });
@@ -129,44 +131,55 @@ export class SocketManager {
             });
           }
         } catch (error) {
+          console.error('Call user error:', error);
           socket.emit('call_error', { message: 'Failed to initiate call' });
         }
       });
 
       socket.on('call_response', async (data) => {
-        const callerSocketId = this.userSockets.get(data.callerId);
-        if (callerSocketId) {
-          this.io.to(callerSocketId).emit('call_response', {
-            accepted: data.accepted,
-            userId: socket.userId,
-            callId: data.callId
-          });
-
-          if (data.accepted) {
-            // Store active call
-            this.activeCalls.set(data.callId, {
-              participants: [data.callerId, socket.userId],
-              startTime: Date.now()
+        try {
+          const callerSocketId = this.userSockets.get(data.callerId);
+          if (callerSocketId) {
+            this.io.to(callerSocketId).emit('call_response', {
+              accepted: data.accepted,
+              userId: socket.userId,
+              callId: data.callId
             });
+
+            if (data.accepted) {
+              // Store active call
+              this.activeCalls.set(data.callId, {
+                participants: [data.callerId, socket.userId],
+                startTime: Date.now()
+              });
+            }
           }
+        } catch (error) {
+          console.error('Call response error:', error);
+          socket.emit('call_error', { message: 'Failed to respond to call' });
         }
       });
 
       socket.on('call_end', async (data) => {
-        const call = this.activeCalls.get(data.callId);
-        if (call) {
-          const duration = Math.floor((Date.now() - call.startTime) / 1000);
-          await this.db.endCall(data.callId, duration);
-          
-          // Notify all participants
-          call.participants.forEach((participantId: number) => {
-            const participantSocket = this.userSockets.get(participantId);
-            if (participantSocket) {
-              this.io.to(participantSocket).emit('call_ended', { callId: data.callId });
-            }
-          });
-          
-          this.activeCalls.delete(data.callId);
+        try {
+          const call = this.activeCalls.get(data.callId);
+          if (call) {
+            const duration = Math.floor((Date.now() - call.startTime) / 1000);
+            await this.db.endCall(data.callId, duration);
+            
+            // Notify all participants
+            call.participants.forEach((participantId: number) => {
+              const participantSocket = this.userSockets.get(participantId);
+              if (participantSocket) {
+                this.io.to(participantSocket).emit('call_ended', { callId: data.callId });
+              }
+            });
+            
+            this.activeCalls.delete(data.callId);
+          }
+        } catch (error) {
+          console.error('Call end error:', error);
+          socket.emit('call_error', { message: 'Failed to end call' });
         }
       });
 
@@ -203,30 +216,34 @@ export class SocketManager {
 
       // Disconnect
       socket.on('disconnect', async () => {
-        if (socket.userId) {
-          await this.db.updateUserStatus(socket.userId, false);
-          this.userSockets.delete(socket.userId);
-          
-          // End any active calls
-          for (const [callId, call] of this.activeCalls.entries()) {
-            if (call.participants.includes(socket.userId)) {
-              const duration = Math.floor((Date.now() - call.startTime) / 1000);
-              await this.db.endCall(parseInt(callId), duration);
-              
-              call.participants.forEach((participantId: number) => {
-                if (participantId !== socket.userId) {
-                  const participantSocket = this.userSockets.get(participantId);
-                  if (participantSocket) {
-                    this.io.to(participantSocket).emit('call_ended', { callId });
+        try {
+          if (socket.userId) {
+            await this.db.updateUserStatus(socket.userId, false);
+            this.userSockets.delete(socket.userId);
+            
+            // End any active calls
+            for (const [callId, call] of this.activeCalls.entries()) {
+              if (call.participants.includes(socket.userId)) {
+                const duration = Math.floor((Date.now() - call.startTime) / 1000);
+                await this.db.endCall(parseInt(callId), duration);
+                
+                call.participants.forEach((participantId: number) => {
+                  if (participantId !== socket.userId) {
+                    const participantSocket = this.userSockets.get(participantId);
+                    if (participantSocket) {
+                      this.io.to(participantSocket).emit('call_ended', { callId });
+                    }
                   }
-                }
-              });
-              
-              this.activeCalls.delete(callId);
+                });
+                
+                this.activeCalls.delete(callId);
+              }
             }
+            
+            console.log(`User ${socket.username} disconnected`);
           }
-          
-          console.log(`User ${socket.username} disconnected`);
+        } catch (error) {
+          console.error('Disconnect error:', error);
         }
       });
     });
