@@ -28,17 +28,22 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' ? false : "http://localhost:5173",
-    methods: ["GET", "POST"]
+    origin: "http://localhost:5173",
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
 // Middleware
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? false : "http://localhost:5173",
-  credentials: true
+  origin: "http://localhost:5173",
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads'));
 
 // Create uploads directory
@@ -52,12 +57,15 @@ const db = new Database();
 // Initialize database and start server
 async function startServer() {
   try {
+    console.log('🔄 Starting Hodhod Messenger server...');
     console.log('🔄 Initializing database...');
+    
     await db.init();
     console.log('✅ Database initialized successfully');
 
     // Initialize socket manager
     const socketManager = new SocketManager(io, db);
+    console.log('✅ Socket manager initialized');
 
     // Routes
     app.use('/api/auth', authRouter(db));
@@ -74,15 +82,37 @@ async function startServer() {
     app.use('/api/twin', twinRouter(db));
     app.use('/api/agi', agiRouter(db));
 
+    console.log('✅ Routes initialized');
+
     // Health check
     app.get('/api/health', (req, res) => {
-      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+      console.log('Health check requested');
+      res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        message: 'Hodhod Messenger API is running'
+      });
+    });
+
+    // Test route
+    app.get('/api/test', (req, res) => {
+      console.log('Test route accessed');
+      res.json({ message: 'Server is working!' });
     });
 
     // Error handling middleware
     app.use((err, req, res, next) => {
       console.error('Server error:', err);
-      res.status(500).json({ message: 'Internal server error' });
+      res.status(500).json({ 
+        message: 'Internal server error',
+        error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+      });
+    });
+
+    // 404 handler
+    app.use('*', (req, res) => {
+      console.log('404 - Route not found:', req.originalUrl);
+      res.status(404).json({ message: 'Route not found' });
     });
 
     // Cron job for future messages
@@ -124,18 +154,33 @@ async function startServer() {
     });
 
     const PORT = process.env.PORT || 3001;
-    server.listen(PORT, () => {
+    
+    server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Hodhod Messenger server running on port ${PORT}`);
       console.log(`📊 Admin panel: http://localhost:${PORT}/admin`);
       console.log(`🧠 World Brain: http://localhost:${PORT}/worldbrain`);
       console.log(`🤖 AGI Companion: http://localhost:${PORT}/agi`);
       console.log(`🔗 API Health: http://localhost:${PORT}/api/health`);
+      console.log(`🔗 API Test: http://localhost:${PORT}/api/test`);
+      console.log('✅ Server is ready to accept connections');
     });
 
   } catch (error) {
     console.error('❌ Failed to start server:', error);
+    console.error('Error details:', error.stack);
     process.exit(1);
   }
 }
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
 
 startServer();
