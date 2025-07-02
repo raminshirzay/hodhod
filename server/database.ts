@@ -1,5 +1,6 @@
 import sqlite3 from 'sqlite3';
 import { promisify } from 'util';
+import bcrypt from 'bcryptjs';
 
 export class Database {
   private db: sqlite3.Database;
@@ -201,11 +202,12 @@ export class Database {
       )
     `);
 
-    // Insert default admin user
+    // Create admin user with proper password hash
+    const adminPasswordHash = await bcrypt.hash('admin123', 10);
     await run(`
       INSERT OR IGNORE INTO users (username, email, passwordHash, role)
-      VALUES ('admin', 'admin@hodhod.com', '$2a$10$rQZ8P5NVJJXj6vGXVPQRDeHUHpuPLjJcUK1XSJdGsrRoJGZOmCjyq', 'admin')
-    `);
+      VALUES ('admin', 'admin@hodhod.com', ?, 'admin')
+    `, [adminPasswordHash]);
 
     // Insert AI user for responses
     await run(`
