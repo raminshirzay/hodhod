@@ -233,7 +233,7 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     const result = await run(
       'INSERT INTO users (username, email, passwordHash, avatar) VALUES (?, ?, ?, ?)',
-      [userData.username, userData.email, userData.passwordHash, userData.avatar]
+      [userData.username, userData.email, userData.passwordHash, userData.avatar ?? null]
     );
     return result;
   }
@@ -260,7 +260,7 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     await run(
       'UPDATE users SET twinEnabled = ?, twinPersonality = ? WHERE id = ?',
-      [twinEnabled, twinPersonality || '', userId]
+      [twinEnabled, twinPersonality ?? null, userId]
     );
   }
 
@@ -269,7 +269,7 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     const result = await run(
       'INSERT INTO chats (name, description, isGroup, avatar, isPremium, createdBy) VALUES (?, ?, ?, ?, ?, ?)',
-      [chatData.name, chatData.description, chatData.isGroup, chatData.avatar, chatData.isPremium || false, chatData.createdBy]
+      [chatData.name ?? null, chatData.description ?? null, chatData.isGroup ?? false, chatData.avatar ?? null, chatData.isPremium ?? false, chatData.createdBy]
     );
     return result;
   }
@@ -305,14 +305,14 @@ export class Database {
         messageData.chatId,
         messageData.senderId,
         messageData.content,
-        messageData.type || 'text',
-        messageData.fileUrl,
-        messageData.fileName,
-        messageData.fileSize,
-        messageData.replyToId,
-        messageData.isPremium || false,
-        messageData.animationType,
-        JSON.stringify(messageData.metadata || {})
+        messageData.type ?? 'text',
+        messageData.fileUrl ?? null,
+        messageData.fileName ?? null,
+        messageData.fileSize ?? null,
+        messageData.replyToId ?? null,
+        messageData.isPremium ?? false,
+        messageData.animationType ?? null,
+        JSON.stringify(messageData.metadata ?? {})
       ]
     );
     return result;
@@ -335,7 +335,7 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     const result = await run(
       'INSERT INTO calls (chatId, initiatorId, participants, type, status, startedAt) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-      [callData.chatId, callData.initiatorId, JSON.stringify(callData.participants), callData.type, 'active']
+      [callData.chatId, callData.initiatorId, JSON.stringify(callData.participants ?? []), callData.type ?? 'voice', 'active']
     );
     return result;
   }
@@ -496,7 +496,7 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     const result = await run(
       'INSERT INTO transactions (userId, amount, currency, status, stripePaymentId, description) VALUES (?, ?, ?, ?, ?, ?)',
-      [transactionData.userId, transactionData.amount, transactionData.currency, transactionData.status, transactionData.stripePaymentId, transactionData.description]
+      [transactionData.userId, transactionData.amount, transactionData.currency ?? 'USD', transactionData.status ?? 'pending', transactionData.stripePaymentId ?? null, transactionData.description ?? null]
     );
     return result;
   }
