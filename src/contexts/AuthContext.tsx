@@ -77,9 +77,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         body: JSON.stringify({ email, password })
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        const text = await response.text();
+        if (text) {
+          data = JSON.parse(text);
+        } else {
+          data = { message: 'Empty response from server' };
+        }
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        data = { message: 'Invalid response from server' };
+      }
 
-      if (response.ok) {
+      if (response.ok && data.token && data.user) {
         localStorage.setItem('hodhod_token', data.token);
         setUser(data.user);
         toast.success('Welcome back!');
@@ -105,9 +116,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         body: JSON.stringify({ username, email, password })
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        const text = await response.text();
+        if (text) {
+          data = JSON.parse(text);
+        } else {
+          data = { message: 'Empty response from server' };
+        }
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        data = { message: 'Invalid response from server' };
+      }
 
-      if (response.ok) {
+      if (response.ok && data.token && data.user) {
         localStorage.setItem('hodhod_token', data.token);
         setUser(data.user);
         toast.success('Welcome to Hodhod!');
