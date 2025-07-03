@@ -3,10 +3,6 @@ import { promisify } from 'util';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export class Database {
   private db: sqlite3.Database;
@@ -14,7 +10,7 @@ export class Database {
 
   constructor() {
     // Create data directory if it doesn't exist
-    const dataDir = path.join(__dirname, '..', 'data');
+    const dataDir = './data';
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
       console.log('✅ Created data directory:', dataDir);

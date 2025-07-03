@@ -8,7 +8,6 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import cron from 'node-cron';
-import { fileURLToPath } from 'url';
 import { Database } from './database.js';
 import { authRouter } from './routes/auth.js';
 import { messageRouter } from './routes/messages.js';
@@ -25,22 +24,19 @@ import { twinRouter } from './routes/twin.js';
 import { agiRouter } from './routes/agi.js';
 import { SocketManager } from './socketManager.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "https://localhost:5173"],
+    origin: "*",
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
-// Enhanced CORS configuration
+// Enhanced CORS configuration for Bolt.new
 app.use(cors({
-  origin: ["http://localhost:5173", "https://localhost:5173"],
+  origin: "*",
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
@@ -64,8 +60,8 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Create necessary directories
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-const dbDir = path.join(__dirname, '..', 'data');
+const uploadsDir = './uploads';
+const dbDir = './data';
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -113,7 +109,6 @@ async function startServer() {
     // Enhanced middleware for request logging
     app.use((req, res, next) => {
       console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-      console.log('Headers:', JSON.stringify(req.headers, null, 2));
       if (req.body && Object.keys(req.body).length > 0) {
         console.log('Body:', JSON.stringify(req.body, null, 2));
       }
