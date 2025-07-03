@@ -254,7 +254,7 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     await run(
       'UPDATE users SET isOnline = ?, lastSeen = CURRENT_TIMESTAMP WHERE id = ?',
-      [isOnline, userId]
+      [isOnline ? 1 : 0, userId]
     );
   }
 
@@ -262,7 +262,7 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     await run(
       'UPDATE users SET twinEnabled = ?, twinPersonality = ? WHERE id = ?',
-      [twinEnabled, twinPersonality ?? null, userId]
+      [twinEnabled ? 1 : 0, twinPersonality ?? null, userId]
     );
   }
 
@@ -271,7 +271,14 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     const result = await run(
       'INSERT INTO chats (name, description, isGroup, avatar, isPremium, createdBy) VALUES (?, ?, ?, ?, ?, ?)',
-      [chatData.name ?? null, chatData.description ?? null, chatData.isGroup ?? false, chatData.avatar ?? null, chatData.isPremium ?? false, chatData.createdBy]
+      [
+        chatData.name ?? null, 
+        chatData.description ?? null, 
+        chatData.isGroup ? 1 : 0, 
+        chatData.avatar ?? null, 
+        chatData.isPremium ? 1 : 0, 
+        chatData.createdBy
+      ]
     );
     return result;
   }
@@ -312,7 +319,7 @@ export class Database {
         messageData.fileName ?? null,
         messageData.fileSize ?? null,
         messageData.replyToId ?? null,
-        messageData.isPremium ?? false,
+        messageData.isPremium ? 1 : 0,
         messageData.animationType ?? null,
         JSON.stringify(messageData.metadata ?? {})
       ]
