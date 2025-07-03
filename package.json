@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "node --import tsx server/index.ts",
+    "server": "node server/index.js",
     "client": "vite",
     "build": "vite build",
     "lint": "eslint .",
@@ -31,7 +31,6 @@
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.7.5",
     "sqlite3": "^5.1.6",
-    "tsx": "^4.7.0",
     "zustand": "^4.4.7"
   },
   "devDependencies": {
