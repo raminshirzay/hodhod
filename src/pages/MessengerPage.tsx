@@ -8,6 +8,7 @@ import { UserProfile } from '../components/UserProfile';
 import { CallScreen } from '../components/CallScreen';
 import { PaymentModal } from '../components/PaymentModal';
 import { MediaEditor } from '../components/MediaEditor';
+import { AdvancedSettings } from '../components/AdvancedSettings';
 import { 
   MessageCircle, 
   Settings, 
@@ -51,6 +52,7 @@ export const MessengerPage: React.FC = () => {
   const [activeCall, setActiveCall] = useState<Call | null>(null);
   const [showPayment, setShowPayment] = useState(false);
   const [showMediaEditor, setShowMediaEditor] = useState(false);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [paymentData, setPaymentData] = useState({ amount: 0, description: '' });
 
   useEffect(() => {
@@ -231,11 +233,11 @@ export const MessengerPage: React.FC = () => {
           </button>
           
           <button
-            onClick={() => setShowProfile(true)}
+            onClick={() => setShowAdvancedSettings(true)}
             className="flex items-center space-x-3 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors w-full"
           >
             <Settings className="h-5 w-5" />
-            <span>Settings</span>
+            <span>Advanced Settings</span>
           </button>
           
           {user?.role === 'admin' && (
@@ -328,6 +330,11 @@ export const MessengerPage: React.FC = () => {
         isOpen={showMediaEditor}
         onClose={() => setShowMediaEditor(false)}
         onSave={handleMediaSave}
+      />
+
+      <AdvancedSettings
+        isOpen={showAdvancedSettings}
+        onClose={() => setShowAdvancedSettings(false)}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Send, Paperclip, Smile, Mic, Image, Calendar } from 'lucide-react';
+import { Send, Paperclip, Smile, Mic, Image, Calendar, Camera, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface MessageInputProps {
@@ -11,6 +11,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, onTyp
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showAIFeatures, setShowAIFeatures] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -82,6 +83,52 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, onTyp
     return null;
   };
 
+  const handleImageAnalysis = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      // Upload image first
+      const uploadResponse = await fetch('/api/messages/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (uploadResponse.ok) {
+        const uploadData = await uploadResponse.json();
+        
+        // Analyze image
+        const analysisResponse = await fetch('/api/ai/analyze-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            imageUrl: `${window.location.origin}${uploadData.fileUrl}`,
+            question: "What is in this image? Describe it in detail."
+          })
+        });
+
+        if (analysisResponse.ok) {
+          const analysisData = await analysisResponse.json();
+          
+          // Send both image and analysis
+          onSendMessage(
+            `Image Analysis: ${analysisData.analysis}`,
+            'file',
+            {
+              fileUrl: uploadData.fileUrl,
+              fileName: uploadData.originalName,
+              fileSize: uploadData.fileSize
+            }
+          );
+          toast.success('Image analyzed and sent');
+        }
+      }
+    } catch (error) {
+      toast.error('Failed to analyze image');
+    }
+  };
   const handleSendWithEmotion = async () => {
     if (message.trim()) {
       const emotion = await detectEmotion(message.trim());
@@ -111,6 +158,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, onTyp
               className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
             >
               <Smile className="h-5 w-5" />
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => setShowAIFeatures(!showAIFeatures)}
+              className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-2xl transition-colors"
+            >
+              <Zap className="h-5 w-5" />
             </button>
           </div>
           
@@ -196,6 +251,62 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, onTyp
           </button>
         </div>
       </form>
+      
+      {/* AI Features Popup */}
+      {showAIFeatures && (
+        <div className="absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-2xl p-3 shadow-lg min-w-[200px]">
+          <div className="space-y-2">
+            <button
+              onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) handleImageAnalysis(file);
+                };
+                input.click();
+                setShowAIFeatures(false);
+              }}
+              className="flex items-center space-x-2 w-full px-3 py-2 text-left hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Camera className="h-4 w-4" />
+              <span className="text-sm">Analyze Image</span>
+            </button>
+            
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch('/api/ai/suggestions', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      message: 'Generate conversation starters',
+                      context: 'casual chat'
+                    })
+                  });
+                  
+                  if (response.ok) {
+                    const data = await response.json();
+                    if (data.suggestions && data.suggestions.length > 0) {
+                      setMessage(data.suggestions[0]);
+                    }
+                  }
+                } catch (error) {
+                  toast.error('Failed to get suggestions');
+                }
+                setShowAIFeatures(false);
+              }}
+              className="flex items-center space-x-2 w-full px-3 py-2 text-left hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Zap className="h-4 w-4" />
+              <span className="text-sm">Smart Suggestions</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

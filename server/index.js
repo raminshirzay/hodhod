@@ -22,6 +22,7 @@ import { callRouter } from './routes/calls.js';
 import { paymentRouter } from './routes/payments.js';
 import { twinRouter } from './routes/twin.js';
 import { agiRouter } from './routes/agi.js';
+import { settingsRouter } from './routes/settings.js';
 import { SocketManager } from './socketManager.js';
 
 const app = express();
@@ -133,6 +134,7 @@ async function startServer() {
     app.use('/api/payments', paymentRouter(db));
     app.use('/api/twin', twinRouter(db));
     app.use('/api/agi', agiRouter(db));
+    app.use('/api/settings', settingsRouter(db));
 
     console.log('✅ Routes initialized');
 

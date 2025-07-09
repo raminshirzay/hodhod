@@ -263,7 +263,10 @@ export class Database {
         INSERT OR IGNORE INTO system_settings (key, value)
         VALUES 
           ('ai_enabled', 'true'),
-          ('openrouter_api_key', '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'),
+          ('openrouter_api_key', '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'),
+          ('openrouter_enabled', 'true'),
+          ('together_api_key', 'df0e3a796e6b2cf9c259764ddbd6864feaeba068fbbc20b9141025b2f9d2055c'),
+          ('together_enabled', 'true'),
           ('stripe_enabled', 'false'),
           ('max_file_size', '10485760'),
           ('twin_enabled', 'true'),
