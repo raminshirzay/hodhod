@@ -25,6 +25,12 @@ import { agiRouter } from './routes/agi.js';
 import { settingsRouter } from './routes/settings.js';
 import { SocketManager } from './socketManager.js';
 
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
@@ -136,6 +142,11 @@ async function startServer() {
     app.use('/api/agi', agiRouter(db));
     app.use('/api/settings', settingsRouter(db));
 
+    // Serve static files from the dist directory (built React app)
+    const distPath = join(__dirname, '..', 'dist');
+    console.log('📁 Serving static files from:', distPath);
+    app.use(express.static(distPath));
+
     console.log('✅ Routes initialized');
 
     // Enhanced health check
@@ -181,6 +192,31 @@ async function startServer() {
       }
     });
 
+    // Serve React app for all non-API routes (client-side routing)
+    app.get('*', (req, res) => {
+      // Don't serve index.html for API routes
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ 
+          message: 'API route not found',
+          path: req.originalUrl,
+          method: req.method,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      console.log('🌐 Serving React app for route:', req.path);
+      const indexPath = join(distPath, 'index.html');
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error('❌ Error serving index.html:', err);
+          res.status(500).json({ 
+            message: 'Failed to serve application',
+            error: err.message 
+          });
+        }
+      });
+    });
+
     // Enhanced error handling middleware
     app.use((err, req, res, next) => {
       console.error('=== SERVER ERROR ===');
@@ -195,18 +231,6 @@ async function startServer() {
       res.status(500).json({ 
         message: 'Internal server error',
         error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
-        timestamp: new Date().toISOString()
-      });
-    });
-
-    // Enhanced 404 handler
-    app.use('*', (req, res) => {
-      console.log('404 - Route not found:', req.method, req.originalUrl);
-      console.log('Available routes: /api/auth, /api/messages, /api/health, /api/test');
-      res.status(404).json({ 
-        message: 'Route not found',
-        path: req.originalUrl,
-        method: req.method,
         timestamp: new Date().toISOString()
       });
     });
