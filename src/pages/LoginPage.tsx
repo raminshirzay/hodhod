@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { MessageCircle, Lock, Mail } from 'lucide-react';
+import { MessageCircle, Lock, Mail, Eye, EyeOff } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { user, login } = useAuth();
 
@@ -25,6 +26,11 @@ export const LoginPage: React.FC = () => {
     setIsLoading(false);
   };
 
+  const handleAdminLogin = () => {
+    setEmail('admin');
+    setPassword('123');
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1F3934] to-[#2D4A3E] p-4">
       <div className="max-w-md w-full space-y-8">
@@ -40,7 +46,7 @@ export const LoginPage: React.FC = () => {
           <div className="space-y-4">
             <div>
               <label htmlFor="email" className="sr-only">
-                Email address
+                Email address or Username
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -49,11 +55,11 @@ export const LoginPage: React.FC = () => {
                 <input
                   id="email"
                   name="email"
-                  type="email"
+                  type="text"
                   autoComplete="email"
                   required
                   className="appearance-none rounded-2xl relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#F3C883] focus:border-transparent focus:z-10 sm:text-sm"
-                  placeholder="Email address"
+                  placeholder="Email address or Username"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -71,14 +77,25 @@ export const LoginPage: React.FC = () => {
                 <input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   required
-                  className="appearance-none rounded-2xl relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#F3C883] focus:border-transparent focus:z-10 sm:text-sm"
+                  className="appearance-none rounded-2xl relative block w-full pl-10 pr-12 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#F3C883] focus:border-transparent focus:z-10 sm:text-sm"
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
               </div>
             </div>
           </div>
@@ -102,10 +119,17 @@ export const LoginPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="text-center">
-            <p className="text-xs text-gray-400">
-              Demo Admin: admin@hodhod.com / admin123
-            </p>
+          <div className="text-center space-y-2">
+            <div className="border-t border-gray-600 pt-4">
+              <p className="text-sm text-gray-400 mb-2">Quick Login:</p>
+              <button
+                type="button"
+                onClick={handleAdminLogin}
+                className="bg-gray-700 text-white px-4 py-2 rounded-xl hover:bg-gray-600 transition-colors text-sm"
+              >
+                Admin Login (admin / 123)
+              </button>
+            </div>
           </div>
         </form>
       </div>

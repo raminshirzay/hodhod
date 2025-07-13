@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { MessageCircle, Lock, Mail, User } from 'lucide-react';
+import { MessageCircle, Lock, Mail, User, Phone, FileText, Eye, EyeOff } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [bio, setBio] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { user, register } = useAuth();
 
@@ -23,9 +27,14 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
+    if (password.length < 3) {
+      alert('Password must be at least 3 characters long');
+      return;
+    }
+
     setIsLoading(true);
     
-    const success = await register(username, email, password);
+    const success = await register(username, email, password, phoneNumber, bio);
     if (success) {
       // Navigation will happen automatically due to user state change
     }
@@ -89,6 +98,47 @@ export const RegisterPage: React.FC = () => {
                 />
               </div>
             </div>
+
+            <div>
+              <label htmlFor="phoneNumber" className="sr-only">
+                Phone Number (Optional)
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Phone className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="phoneNumber"
+                  name="phoneNumber"
+                  type="tel"
+                  autoComplete="tel"
+                  className="appearance-none rounded-2xl relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#F3C883] focus:border-transparent focus:z-10 sm:text-sm"
+                  placeholder="Phone Number (Optional)"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="bio" className="sr-only">
+                Bio (Optional)
+              </label>
+              <div className="relative">
+                <div className="absolute top-3 left-0 pl-3 flex items-start pointer-events-none">
+                  <FileText className="h-5 w-5 text-gray-400" />
+                </div>
+                <textarea
+                  id="bio"
+                  name="bio"
+                  rows={3}
+                  className="appearance-none rounded-2xl relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#F3C883] focus:border-transparent focus:z-10 sm:text-sm resize-none"
+                  placeholder="Tell us about yourself (Optional)"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                />
+              </div>
+            </div>
             
             <div>
               <label htmlFor="password" className="sr-only">
@@ -101,14 +151,25 @@ export const RegisterPage: React.FC = () => {
                 <input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   required
-                  className="appearance-none rounded-2xl relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#F3C883] focus:border-transparent focus:z-10 sm:text-sm"
-                  placeholder="Password"
+                  className="appearance-none rounded-2xl relative block w-full pl-10 pr-12 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#F3C883] focus:border-transparent focus:z-10 sm:text-sm"
+                  placeholder="Password (min 3 characters)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
               </div>
             </div>
             
@@ -123,14 +184,25 @@ export const RegisterPage: React.FC = () => {
                 <input
                   id="confirmPassword"
                   name="confirmPassword"
-                  type="password"
+                  type={showConfirmPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   required
-                  className="appearance-none rounded-2xl relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#F3C883] focus:border-transparent focus:z-10 sm:text-sm"
+                  className="appearance-none rounded-2xl relative block w-full pl-10 pr-12 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#F3C883] focus:border-transparent focus:z-10 sm:text-sm"
                   placeholder="Confirm Password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-gray-400" />
+                  )}
+                </button>
               </div>
             </div>
           </div>

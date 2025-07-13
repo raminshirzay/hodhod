@@ -8,13 +8,17 @@ interface User {
   avatar: string;
   role: string;
   twinEnabled: boolean;
+  phoneNumber?: string;
+  bio?: string;
+  status?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
-  register: (username: string, email: string, password: string) => Promise<boolean>;
+  register: (username: string, email: string, password: string, phoneNumber?: string, bio?: string) => Promise<boolean>;
   logout: () => void;
+  updateProfile: (profileData: Partial<User>) => Promise<boolean>;
   isLoading: boolean;
 }
 
@@ -32,9 +36,9 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Enhanced API configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-const API_TIMEOUT = 10000; // 10 seconds
+// Enhanced API configuration for Bolt.new
+const API_BASE_URL = '/api';
+const API_TIMEOUT = 15000; // 15 seconds
 
 // Enhanced fetch with timeout and better error handling
 const fetchWithTimeout = async (url: string, options: RequestInit = {}) => {
@@ -42,6 +46,9 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}) => {
   const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
 
   try {
+    console.log(`🌐 Making request to: ${url}`);
+    console.log(`📤 Request options:`, options);
+    
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
@@ -51,10 +58,17 @@ const fetchWithTimeout = async (url: string, options: RequestInit = {}) => {
         ...options.headers,
       },
     });
+    
     clearTimeout(timeoutId);
+    
+    console.log(`📥 Response status: ${response.status}`);
+    console.log(`📥 Response headers:`, Object.fromEntries(response.headers.entries()));
+    
     return response;
-  } catch (error) {
+  } catch (error: any) {
     clearTimeout(timeoutId);
+    console.error(`❌ Fetch error for ${url}:`, error);
+    
     if (error.name === 'AbortError') {
       throw new Error('Request timeout - server may be down');
     }
@@ -77,8 +91,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const verifyToken = async (token: string) => {
     try {
-      console.log('🔄 Verifying token...');
-      const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/verify`, {
+      console.log('🔐 Verifying token...');
+      const response = await fetchWithTimeout(`${API_BASE_URL}/auth/verify`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         }
@@ -87,20 +101,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('✅ Verify response status:', response.status);
 
       if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Token verification successful:', data);
-        setUser(data.user);
+        const responseText = await response.text();
+        console.log('📄 Response text length:', responseText.length);
+        
+        if (!responseText) {
+          console.error('❌ Empty response from server');
+          localStorage.removeItem('hodhod_token');
+          return;
+        }
+
+        try {
+          const data = JSON.parse(responseText);
+          console.log('✅ Token verification successful:', data);
+          
+          if (data.success && data.user) {
+            setUser(data.user);
+          } else {
+            console.log('❌ Invalid response format:', data);
+            localStorage.removeItem('hodhod_token');
+          }
+        } catch (parseError) {
+          console.error('❌ Failed to parse response:', parseError);
+          console.error('❌ Response text was:', responseText);
+          localStorage.removeItem('hodhod_token');
+        }
       } else {
-        console.log('❌ Token verification failed');
+        console.log('❌ Token verification failed with status:', response.status);
         localStorage.removeItem('hodhod_token');
         if (response.status === 401) {
           toast.error('Session expired. Please login again.');
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Token verification failed:', error);
       localStorage.removeItem('hodhod_token');
-      toast.error('Connection failed. Please check if server is running.');
+      if (error.message.includes('timeout')) {
+        toast.error('Connection timeout. Please check your internet connection.');
+      } else {
+        toast.error('Connection failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -109,26 +148,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       console.log('=== LOGIN ATTEMPT ===');
-      console.log('Email:', email);
-      console.log('API URL:', `${API_BASE_URL}/api/auth/login`);
+      console.log('Email/Username:', email);
+      console.log('API URL:', `${API_BASE_URL}/auth/login`);
       
       // First, test server connectivity
       try {
-        const healthResponse = await fetchWithTimeout(`${API_BASE_URL}/api/health`);
+        const healthResponse = await fetchWithTimeout(`${API_BASE_URL}/../health`);
         console.log('✅ Server health check:', healthResponse.status);
       } catch (healthError) {
-        console.error('❌ Server health check failed:', healthError);
-        toast.error('Cannot connect to server. Please ensure the server is running on port 3001.');
-        return false;
+        console.log('⚠️ Health check failed, proceeding anyway:', healthError);
       }
 
-      const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/login`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         body: JSON.stringify({ email, password })
       });
 
       console.log('✅ Login response status:', response.status);
-      console.log('✅ Login response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -160,6 +196,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         data = JSON.parse(responseText);
         console.log('✅ Parsed login response:', { 
+          success: data.success,
           hasToken: !!data.token, 
           hasUser: !!data.user,
           username: data.user?.username 
@@ -171,7 +208,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return false;
       }
 
-      if (data.token && data.user) {
+      if (data.success && data.token && data.user) {
         localStorage.setItem('hodhod_token', data.token);
         setUser(data.user);
         toast.success(`Welcome back, ${data.user.username}!`);
@@ -182,12 +219,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         toast.error(data.message || 'Login failed - invalid response');
         return false;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Login error:', error);
       if (error.message.includes('timeout')) {
-        toast.error('Request timeout - server may be overloaded');
+        toast.error('Request timeout - please try again');
       } else if (error.message.includes('fetch')) {
-        toast.error('Network error - please check if server is running on port 3001');
+        toast.error('Network error - please check your connection');
       } else {
         toast.error('Login failed - please try again');
       }
@@ -195,25 +232,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const register = async (username: string, email: string, password: string): Promise<boolean> => {
+  const register = async (username: string, email: string, password: string, phoneNumber?: string, bio?: string): Promise<boolean> => {
     try {
       console.log('=== REGISTRATION ATTEMPT ===');
       console.log('Username:', username, 'Email:', email);
-      console.log('API URL:', `${API_BASE_URL}/api/auth/register`);
+      console.log('API URL:', `${API_BASE_URL}/auth/register`);
       
-      // First, test server connectivity
-      try {
-        const healthResponse = await fetchWithTimeout(`${API_BASE_URL}/api/health`);
-        console.log('✅ Server health check:', healthResponse.status);
-      } catch (healthError) {
-        console.error('❌ Server health check failed:', healthError);
-        toast.error('Cannot connect to server. Please ensure the server is running on port 3001.');
-        return false;
-      }
-
-      const response = await fetchWithTimeout(`${API_BASE_URL}/api/auth/register`, {
+      const response = await fetchWithTimeout(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
-        body: JSON.stringify({ username, email, password })
+        body: JSON.stringify({ username, email, password, phoneNumber, bio })
       });
 
       console.log('✅ Register response status:', response.status);
@@ -248,6 +275,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         data = JSON.parse(responseText);
         console.log('✅ Parsed register response:', { 
+          success: data.success,
           hasToken: !!data.token, 
           hasUser: !!data.user,
           username: data.user?.username 
@@ -259,7 +287,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return false;
       }
 
-      if (data.token && data.user) {
+      if (data.success && data.token && data.user) {
         localStorage.setItem('hodhod_token', data.token);
         setUser(data.user);
         toast.success(`Welcome to Hodhod, ${data.user.username}!`);
@@ -270,15 +298,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         toast.error(data.message || 'Registration failed - invalid response');
         return false;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Registration error:', error);
       if (error.message.includes('timeout')) {
-        toast.error('Request timeout - server may be overloaded');
+        toast.error('Request timeout - please try again');
       } else if (error.message.includes('fetch')) {
-        toast.error('Network error - please check if server is running on port 3001');
+        toast.error('Network error - please check your connection');
       } else {
         toast.error('Registration failed - please try again');
       }
+      return false;
+    }
+  };
+
+  const updateProfile = async (profileData: Partial<User>): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem('hodhod_token');
+      if (!token) {
+        toast.error('Please login first');
+        return false;
+      }
+
+      const response = await fetchWithTimeout(`${API_BASE_URL}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(profileData)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.user) {
+          setUser(data.user);
+          toast.success('Profile updated successfully');
+          return true;
+        }
+      }
+      
+      toast.error('Failed to update profile');
+      return false;
+    } catch (error) {
+      console.error('❌ Profile update error:', error);
+      toast.error('Failed to update profile');
       return false;
     }
   };
@@ -290,7 +352,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateProfile, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
