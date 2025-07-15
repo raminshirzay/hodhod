@@ -148,8 +148,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       console.log('=== LOGIN ATTEMPT ===');
-      console.log('Email/Username:', email);
+      console.log('Email/Username:', email === 'admin' ? 'admin@hodhod.com' : email);
       console.log('API URL:', `${API_BASE_URL}/auth/login`);
+      
+      // Handle admin shortcut
+      const loginEmail = email === 'admin' ? 'admin@hodhod.com' : email;
       
       // First, test server connectivity
       try {
@@ -161,7 +164,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const response = await fetchWithTimeout(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email: loginEmail, password })
       });
 
       console.log('✅ Login response status:', response.status);

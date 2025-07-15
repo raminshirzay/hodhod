@@ -28,21 +28,18 @@ export class Database {
       }
     });
 
-    // Enable foreign keys and WAL mode for better performance
+    // Enable foreign keys and WAL mode
     this.db.run('PRAGMA foreign_keys = ON');
     this.db.run('PRAGMA journal_mode = WAL');
-    this.db.run('PRAGMA synchronous = NORMAL');
-    this.db.run('PRAGMA cache_size = 10000');
-    this.db.run('PRAGMA temp_store = MEMORY');
   }
 
   async init() {
     const run = promisify(this.db.run.bind(this.db));
     
     try {
-      console.log('🔄 Creating comprehensive database schema...');
+      console.log('🔄 Creating database schema...');
       
-      // Enhanced Users table with all features
+      // Users table with all required columns
       await run(`
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,18 +59,18 @@ export class Database {
           theme TEXT DEFAULT 'light',
           language TEXT DEFAULT 'en',
           timezone TEXT DEFAULT 'UTC',
-          notificationSettings TEXT DEFAULT '{}',
-          privacySettings TEXT DEFAULT '{}',
-          twoFactorEnabled INTEGER DEFAULT 0,
-          twoFactorSecret TEXT,
           emailVerified INTEGER DEFAULT 1,
           phoneVerified INTEGER DEFAULT 0,
+          twoFactorEnabled INTEGER DEFAULT 0,
+          notificationSettings TEXT DEFAULT '{}',
+          privacySettings TEXT DEFAULT '{}',
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
           updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
+      console.log('✅ Users table created');
 
-      // Enhanced Chats table
+      // Chats table
       await run(`
         CREATE TABLE IF NOT EXISTS chats (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,19 +79,17 @@ export class Database {
           isGroup INTEGER DEFAULT 0,
           avatar TEXT,
           isPremium INTEGER DEFAULT 0,
-          isArchived INTEGER DEFAULT 0,
-          isMuted INTEGER DEFAULT 0,
-          muteUntil DATETIME,
           wallpaper TEXT,
           encryptionKey TEXT,
-          lastActivity DATETIME DEFAULT CURRENT_TIMESTAMP,
           createdBy INTEGER,
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (createdBy) REFERENCES users(id)
         )
       `);
+      console.log('✅ Chats table created');
 
-      // Chat participants with enhanced roles
+      // Chat participants
       await run(`
         CREATE TABLE IF NOT EXISTS chat_participants (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,15 +98,14 @@ export class Database {
           role TEXT DEFAULT 'member',
           permissions TEXT DEFAULT '{}',
           joinedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          leftAt DATETIME,
-          isActive INTEGER DEFAULT 1,
-          FOREIGN KEY (chatId) REFERENCES chats(id),
-          FOREIGN KEY (userId) REFERENCES users(id),
+          FOREIGN KEY (chatId) REFERENCES chats(id) ON DELETE CASCADE,
+          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
           UNIQUE(chatId, userId)
         )
       `);
+      console.log('✅ Chat participants table created');
 
-      // Enhanced Messages table with all features
+      // Messages table
       await run(`
         CREATE TABLE IF NOT EXISTS messages (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,75 +117,60 @@ export class Database {
           fileName TEXT,
           fileSize INTEGER,
           fileMimeType TEXT,
-          thumbnailUrl TEXT,
           replyToId INTEGER,
           forwardedFromId INTEGER,
           isPremium INTEGER DEFAULT 0,
-          isEncrypted INTEGER DEFAULT 0,
           animationType TEXT,
+          mentions TEXT DEFAULT '[]',
+          hashtags TEXT DEFAULT '[]',
+          location TEXT,
+          expiresAt DATETIME,
           metadata TEXT DEFAULT '{}',
           isEdited INTEGER DEFAULT 0,
           editedAt DATETIME,
           isDeleted INTEGER DEFAULT 0,
           deletedAt DATETIME,
-          readBy TEXT DEFAULT '[]',
-          deliveredTo TEXT DEFAULT '[]',
-          reactions TEXT DEFAULT '{}',
-          mentions TEXT DEFAULT '[]',
-          hashtags TEXT DEFAULT '[]',
-          location TEXT,
-          expiresAt DATETIME,
           timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (chatId) REFERENCES chats(id),
+          FOREIGN KEY (chatId) REFERENCES chats(id) ON DELETE CASCADE,
           FOREIGN KEY (senderId) REFERENCES users(id),
-          FOREIGN KEY (replyToId) REFERENCES messages(id),
-          FOREIGN KEY (forwardedFromId) REFERENCES messages(id)
+          FOREIGN KEY (replyToId) REFERENCES messages(id)
         )
       `);
+      console.log('✅ Messages table created');
 
-      // Stories table with enhanced features
+      // Message reactions
       await run(`
-        CREATE TABLE IF NOT EXISTS stories (
+        CREATE TABLE IF NOT EXISTS message_reactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          messageId INTEGER,
+          userId INTEGER,
+          reaction TEXT NOT NULL,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (messageId) REFERENCES messages(id) ON DELETE CASCADE,
+          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+          UNIQUE(messageId, userId, reaction)
+        )
+      `);
+      console.log('✅ Message reactions table created');
+
+      // User sessions
+      await run(`
+        CREATE TABLE IF NOT EXISTS user_sessions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           userId INTEGER,
-          content TEXT,
-          mediaUrl TEXT,
-          mediaType TEXT DEFAULT 'text',
-          thumbnailUrl TEXT,
-          backgroundColor TEXT DEFAULT '#1F3934',
-          textColor TEXT DEFAULT '#FFFFFF',
-          font TEXT DEFAULT 'default',
-          duration INTEGER DEFAULT 10,
-          viewCount INTEGER DEFAULT 0,
+          sessionToken TEXT UNIQUE NOT NULL,
+          deviceInfo TEXT,
+          ipAddress TEXT,
+          userAgent TEXT,
           isActive INTEGER DEFAULT 1,
-          allowReplies INTEGER DEFAULT 1,
-          allowSharing INTEGER DEFAULT 1,
-          music TEXT,
-          filters TEXT DEFAULT '[]',
-          stickers TEXT DEFAULT '[]',
-          location TEXT,
-          expiresAt DATETIME,
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (userId) REFERENCES users(id)
+          expiresAt DATETIME,
+          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
         )
       `);
+      console.log('✅ User sessions table created');
 
-      // Story views with enhanced tracking
-      await run(`
-        CREATE TABLE IF NOT EXISTS story_views (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          storyId INTEGER,
-          viewerId INTEGER,
-          viewDuration INTEGER DEFAULT 0,
-          reactionType TEXT,
-          viewedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (storyId) REFERENCES stories(id),
-          FOREIGN KEY (viewerId) REFERENCES users(id),
-          UNIQUE(storyId, viewerId)
-        )
-      `);
-
-      // Enhanced Calls table
+      // Calls table
       await run(`
         CREATE TABLE IF NOT EXISTS calls (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -203,205 +182,72 @@ export class Database {
           endedAt DATETIME,
           duration INTEGER,
           type TEXT DEFAULT 'voice',
-          quality TEXT DEFAULT 'good',
+          quality TEXT,
           recordingUrl TEXT,
-          isRecorded INTEGER DEFAULT 0,
-          failureReason TEXT,
-          bandwidth TEXT,
           FOREIGN KEY (chatId) REFERENCES chats(id),
           FOREIGN KEY (initiatorId) REFERENCES users(id)
         )
       `);
+      console.log('✅ Calls table created');
 
-      // User settings with comprehensive options
-      await run(`
-        CREATE TABLE IF NOT EXISTS user_settings (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          category TEXT NOT NULL,
-          settingKey TEXT NOT NULL,
-          settingValue TEXT,
-          isEncrypted INTEGER DEFAULT 0,
-          updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (userId) REFERENCES users(id),
-          UNIQUE(userId, category, settingKey)
-        )
-      `);
-
-      // System settings with categories
-      await run(`
-        CREATE TABLE IF NOT EXISTS system_settings (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          category TEXT NOT NULL,
-          key TEXT NOT NULL,
-          value TEXT,
-          description TEXT,
-          isPublic INTEGER DEFAULT 0,
-          updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(category, key)
-        )
-      `);
-
-      // Contacts and relationships
-      await run(`
-        CREATE TABLE IF NOT EXISTS contacts (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          contactUserId INTEGER,
-          displayName TEXT,
-          relationship TEXT DEFAULT 'contact',
-          isBlocked INTEGER DEFAULT 0,
-          isFavorite INTEGER DEFAULT 0,
-          addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (userId) REFERENCES users(id),
-          FOREIGN KEY (contactUserId) REFERENCES users(id),
-          UNIQUE(userId, contactUserId)
-        )
-      `);
-
-      // Message reactions
-      await run(`
-        CREATE TABLE IF NOT EXISTS message_reactions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          messageId INTEGER,
-          userId INTEGER,
-          reaction TEXT NOT NULL,
-          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (messageId) REFERENCES messages(id),
-          FOREIGN KEY (userId) REFERENCES users(id),
-          UNIQUE(messageId, userId, reaction)
-        )
-      `);
-
-      // File attachments with metadata
-      await run(`
-        CREATE TABLE IF NOT EXISTS file_attachments (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          messageId INTEGER,
-          fileName TEXT NOT NULL,
-          originalName TEXT NOT NULL,
-          fileSize INTEGER,
-          mimeType TEXT,
-          fileUrl TEXT NOT NULL,
-          thumbnailUrl TEXT,
-          duration INTEGER,
-          dimensions TEXT,
-          checksum TEXT,
-          isScanned INTEGER DEFAULT 0,
-          scanResult TEXT,
-          uploadedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (messageId) REFERENCES messages(id)
-        )
-      `);
-
-      // Notifications system
-      await run(`
-        CREATE TABLE IF NOT EXISTS notifications (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          type TEXT NOT NULL,
-          title TEXT NOT NULL,
-          message TEXT,
-          data TEXT DEFAULT '{}',
-          isRead INTEGER DEFAULT 0,
-          isPush INTEGER DEFAULT 0,
-          isEmail INTEGER DEFAULT 0,
-          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          readAt DATETIME,
-          FOREIGN KEY (userId) REFERENCES users(id)
-        )
-      `);
-
-      // Sessions for security
-      await run(`
-        CREATE TABLE IF NOT EXISTS user_sessions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          sessionToken TEXT UNIQUE NOT NULL,
-          deviceInfo TEXT,
-          ipAddress TEXT,
-          userAgent TEXT,
-          isActive INTEGER DEFAULT 1,
-          lastActivity DATETIME DEFAULT CURRENT_TIMESTAMP,
-          expiresAt DATETIME,
-          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (userId) REFERENCES users(id)
-        )
-      `);
-
-      // Enhanced Future messages
+      // Future messages table
       await run(`
         CREATE TABLE IF NOT EXISTS future_messages (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           chatId INTEGER,
           senderId INTEGER,
           content TEXT NOT NULL,
-          type TEXT DEFAULT 'text',
-          fileUrl TEXT,
           scheduledFor DATETIME NOT NULL,
-          timezone TEXT DEFAULT 'UTC',
           repeatType TEXT,
           repeatInterval INTEGER,
-          maxRepeats INTEGER,
-          currentRepeats INTEGER DEFAULT 0,
           sent INTEGER DEFAULT 0,
-          sentAt DATETIME,
-          cancelled INTEGER DEFAULT 0,
-          cancelledAt DATETIME,
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (chatId) REFERENCES chats(id),
+          FOREIGN KEY (chatId) REFERENCES chats(id) ON DELETE CASCADE,
           FOREIGN KEY (senderId) REFERENCES users(id)
         )
       `);
+      console.log('✅ Future messages table created');
 
-      // World brain questions with enhanced features
+      // World brain questions
       await run(`
         CREATE TABLE IF NOT EXISTS world_brain_questions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           question TEXT NOT NULL,
-          description TEXT,
+          askedBy INTEGER,
           category TEXT,
           tags TEXT DEFAULT '[]',
-          askedBy INTEGER,
           status TEXT DEFAULT 'open',
-          priority INTEGER DEFAULT 0,
-          bounty DECIMAL(10,2) DEFAULT 0,
           finalAnswer TEXT,
-          finalAnswerId INTEGER,
-          viewCount INTEGER DEFAULT 0,
-          upvotes INTEGER DEFAULT 0,
-          downvotes INTEGER DEFAULT 0,
+          confidence REAL DEFAULT 0,
+          views INTEGER DEFAULT 0,
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
           updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (askedBy) REFERENCES users(id),
-          FOREIGN KEY (finalAnswerId) REFERENCES world_brain_answers(id)
+          FOREIGN KEY (askedBy) REFERENCES users(id)
         )
       `);
+      console.log('✅ World brain questions table created');
 
-      // World brain answers with enhanced features
+      // World brain answers
       await run(`
         CREATE TABLE IF NOT EXISTS world_brain_answers (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           questionId INTEGER,
           userId INTEGER,
           answer TEXT NOT NULL,
-          sources TEXT DEFAULT '[]',
-          confidence INTEGER DEFAULT 50,
           votes INTEGER DEFAULT 0,
-          upvotes INTEGER DEFAULT 0,
-          downvotes INTEGER DEFAULT 0,
+          confidence REAL DEFAULT 0,
           isVerified INTEGER DEFAULT 0,
           verifiedBy INTEGER,
-          verifiedAt DATETIME,
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
           updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (questionId) REFERENCES world_brain_questions(id),
+          FOREIGN KEY (questionId) REFERENCES world_brain_questions(id) ON DELETE CASCADE,
           FOREIGN KEY (userId) REFERENCES users(id),
           FOREIGN KEY (verifiedBy) REFERENCES users(id)
         )
       `);
+      console.log('✅ World brain answers table created');
 
-      // AGI companion conversations with context
+      // AGI conversations
       await run(`
         CREATE TABLE IF NOT EXISTS agi_conversations (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -410,33 +256,108 @@ export class Database {
           message TEXT NOT NULL,
           response TEXT NOT NULL,
           context TEXT DEFAULT '{}',
-          mood TEXT,
-          topics TEXT DEFAULT '[]',
-          sentiment REAL,
-          confidence REAL,
-          processingTime INTEGER,
           model TEXT,
-          tokens INTEGER,
+          provider TEXT,
+          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+      console.log('✅ AGI conversations table created');
+
+      // Stories table
+      await run(`
+        CREATE TABLE IF NOT EXISTS stories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          userId INTEGER,
+          content TEXT,
+          mediaUrl TEXT,
+          mediaType TEXT,
+          backgroundColor TEXT,
+          textColor TEXT,
+          views INTEGER DEFAULT 0,
+          expiresAt DATETIME,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+      console.log('✅ Stories table created');
+
+      // Story views
+      await run(`
+        CREATE TABLE IF NOT EXISTS story_views (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          storyId INTEGER,
+          viewerId INTEGER,
+          viewedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (storyId) REFERENCES stories(id) ON DELETE CASCADE,
+          FOREIGN KEY (viewerId) REFERENCES users(id) ON DELETE CASCADE,
+          UNIQUE(storyId, viewerId)
+        )
+      `);
+      console.log('✅ Story views table created');
+
+      // Contacts table
+      await run(`
+        CREATE TABLE IF NOT EXISTS contacts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          userId INTEGER,
+          contactId INTEGER,
+          displayName TEXT,
+          relationship TEXT DEFAULT 'friend',
+          isBlocked INTEGER DEFAULT 0,
+          isFavorite INTEGER DEFAULT 0,
+          addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (contactId) REFERENCES users(id) ON DELETE CASCADE,
+          UNIQUE(userId, contactId)
+        )
+      `);
+      console.log('✅ Contacts table created');
+
+      // Notifications table
+      await run(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          userId INTEGER,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          data TEXT DEFAULT '{}',
+          isRead INTEGER DEFAULT 0,
+          createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+      console.log('✅ Notifications table created');
+
+      // System settings
+      await run(`
+        CREATE TABLE IF NOT EXISTS system_settings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          key TEXT UNIQUE NOT NULL,
+          value TEXT,
+          category TEXT DEFAULT 'general',
+          updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✅ System settings table created');
+
+      // Event logs for analytics
+      await run(`
+        CREATE TABLE IF NOT EXISTS event_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          userId INTEGER,
+          eventType TEXT NOT NULL,
+          eventData TEXT DEFAULT '{}',
+          ipAddress TEXT,
+          userAgent TEXT,
           timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (userId) REFERENCES users(id)
         )
       `);
+      console.log('✅ Event logs table created');
 
-      // Digital twin sessions with learning
-      await run(`
-        CREATE TABLE IF NOT EXISTS twin_sessions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          sessionData TEXT,
-          learningData TEXT DEFAULT '{}',
-          interactions INTEGER DEFAULT 0,
-          accuracy REAL DEFAULT 0.5,
-          lastActive DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (userId) REFERENCES users(id)
-        )
-      `);
-
-      // Payment transactions (real implementation ready)
+      // Payment transactions
       await run(`
         CREATE TABLE IF NOT EXISTS transactions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -444,164 +365,94 @@ export class Database {
           amount DECIMAL(10,2),
           currency TEXT DEFAULT 'USD',
           status TEXT DEFAULT 'pending',
-          type TEXT DEFAULT 'payment',
-          description TEXT,
           stripePaymentId TEXT,
-          stripeCustomerId TEXT,
+          description TEXT,
           metadata TEXT DEFAULT '{}',
-          refundedAmount DECIMAL(10,2) DEFAULT 0,
-          refundedAt DATETIME,
           createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
           updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (userId) REFERENCES users(id)
         )
       `);
-
-      // Analytics and metrics
-      await run(`
-        CREATE TABLE IF NOT EXISTS analytics_events (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          eventType TEXT NOT NULL,
-          eventData TEXT DEFAULT '{}',
-          sessionId TEXT,
-          ipAddress TEXT,
-          userAgent TEXT,
-          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (userId) REFERENCES users(id)
-        )
-      `);
+      console.log('✅ Transactions table created');
 
       // Create indexes for performance
-      await run('CREATE INDEX IF NOT EXISTS idx_messages_chat_timestamp ON messages(chatId, timestamp)');
-      await run('CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(senderId)');
+      console.log('🔄 Creating database indexes...');
+      
       await run('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
       await run('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)');
-      await run('CREATE INDEX IF NOT EXISTS idx_chat_participants_user ON chat_participants(userId)');
-      await run('CREATE INDEX IF NOT EXISTS idx_chat_participants_chat ON chat_participants(chatId)');
-      await run('CREATE INDEX IF NOT EXISTS idx_stories_user_active ON stories(userId, isActive)');
-      await run('CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(userId, isRead)');
-      await run('CREATE INDEX IF NOT EXISTS idx_future_messages_scheduled ON future_messages(scheduledFor, sent)');
-
-      console.log('✅ Database indexes created for optimal performance');
-
-      // Create comprehensive admin user
-      console.log('🔄 Creating comprehensive admin user...');
-      const adminPasswordHash = await bcrypt.hash('123', 12);
+      await run('CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chatId, timestamp)');
+      await run('CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(senderId)');
+      await run('CREATE INDEX IF NOT EXISTS idx_chat_participants ON chat_participants(chatId, userId)');
+      await run('CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(userId, isActive)');
+      await run('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(userId, isRead)');
+      await run('CREATE INDEX IF NOT EXISTS idx_stories_user ON stories(userId, expiresAt)');
+      await run('CREATE INDEX IF NOT EXISTS idx_events_user ON event_logs(userId, eventType)');
       
-      const get = promisify(this.db.get.bind(this.db));
-      const existingAdmin = await get('SELECT id FROM users WHERE username = ?', ['admin']);
+      console.log('✅ Database indexes created');
+
+      // Create static admin user
+      console.log('🔄 Creating static admin user...');
+      const adminPasswordHash = await bcrypt.hash('admin123', 12);
       
-      if (!existingAdmin) {
-        await run(`
-          INSERT INTO users (
-            username, email, passwordHash, role, avatar, bio, status,
-            theme, language, emailVerified, phoneVerified
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          'admin',
-          'admin@hodhod.com',
-          adminPasswordHash,
-          'admin',
+      await run(`
+        INSERT OR REPLACE INTO users (
+          id, username, email, passwordHash, role, avatar, 
+          emailVerified, phoneVerified, status, theme, language
+        ) VALUES (
+          1, 'admin', 'admin@hodhod.com', ?, 'admin', 
           'https://ui-avatars.com/api/?name=Admin&background=1F3934&color=F3C883&size=128',
-          'System Administrator - Full access to all features',
-          'available',
-          'light',
-          'en',
-          1,
-          1
-        ]);
-        console.log('✅ Comprehensive admin user created: username=admin, password=123');
-      } else {
-        await run(`
-          UPDATE users SET 
-            passwordHash = ?, 
-            role = 'admin',
-            emailVerified = 1,
-            phoneVerified = 1,
-            updatedAt = CURRENT_TIMESTAMP
-          WHERE username = 'admin'
-        `, [adminPasswordHash]);
-        console.log('✅ Admin user updated with enhanced features');
-      }
+          1, 0, 'available', 'light', 'en'
+        )
+      `, [adminPasswordHash]);
+      
+      console.log('✅ Static admin user created: admin@hodhod.com / admin123');
 
-      // Create AI user with enhanced capabilities
-      const existingAI = await get('SELECT id FROM users WHERE username = ?', ['HodhodAI']);
-      if (!existingAI) {
-        await run(`
-          INSERT INTO users (
-            id, username, email, passwordHash, role, avatar, bio, status,
-            theme, language, emailVerified
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          999,
-          'HodhodAI',
-          'ai@hodhod.com',
-          'no-password',
-          'ai',
+      // Create AI user for responses
+      await run(`
+        INSERT OR REPLACE INTO users (
+          id, username, email, passwordHash, role, avatar,
+          emailVerified, status
+        ) VALUES (
+          999, 'HodhodAI', 'ai@hodhod.com', 'no-password', 'ai', 
           'https://ui-avatars.com/api/?name=AI&background=F3C883&color=1F3934&size=128',
-          'Advanced AI Assistant with multi-modal capabilities',
-          'online',
-          'light',
-          'en',
-          1
-        ]);
-        console.log('✅ Enhanced AI user created');
-      }
+          1, 'available'
+        )
+      `);
+      console.log('✅ AI user created');
 
-      // Insert comprehensive system settings
+      // Insert default system settings
       const defaultSettings = [
-        // AI Settings
-        ['ai', 'enabled', 'true', 'Enable AI features'],
-        ['ai', 'openrouter_api_key', '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', 'OpenRouter API key'],
-        ['ai', 'openrouter_enabled', 'true', 'Enable OpenRouter provider'],
-        ['ai', 'together_api_key', 'df0e3a796e6b2cf9c259764ddbd6864feaeba068fbbc20b9141025b2f9d2055c', 'Together AI API key'],
-        ['ai', 'together_enabled', 'true', 'Enable Together AI provider'],
-        ['ai', 'default_model', 'meta-llama/llama-3.2-1b-instruct:free', 'Default AI model'],
-        ['ai', 'max_tokens', '2048', 'Maximum tokens per request'],
-        ['ai', 'temperature', '0.7', 'AI response creativity'],
-        
-        // System Settings
-        ['system', 'max_file_size', '52428800', 'Maximum file size (50MB)'],
-        ['system', 'allowed_file_types', 'jpg,jpeg,png,gif,webp,mp4,webm,mp3,wav,pdf,doc,docx', 'Allowed file types'],
-        ['system', 'session_timeout', '86400', 'Session timeout in seconds'],
-        ['system', 'rate_limit', '100', 'API rate limit per minute'],
-        
-        // Features
-        ['features', 'twin_enabled', 'true', 'Enable digital twin'],
-        ['features', 'world_brain_enabled', 'true', 'Enable world brain'],
-        ['features', 'stories_enabled', 'true', 'Enable stories'],
-        ['features', 'calls_enabled', 'true', 'Enable voice/video calls'],
-        ['features', 'payments_enabled', 'false', 'Enable payment system'],
-        ['features', 'encryption_enabled', 'true', 'Enable message encryption'],
-        
-        // Security
-        ['security', 'password_min_length', '3', 'Minimum password length'],
-        ['security', 'max_login_attempts', '5', 'Maximum login attempts'],
-        ['security', 'lockout_duration', '900', 'Account lockout duration'],
-        ['security', 'require_email_verification', 'false', 'Require email verification'],
-        
-        // Notifications
-        ['notifications', 'push_enabled', 'true', 'Enable push notifications'],
-        ['notifications', 'email_enabled', 'true', 'Enable email notifications'],
-        ['notifications', 'sms_enabled', 'false', 'Enable SMS notifications']
+        ['ai_enabled', 'true', 'ai'],
+        ['openrouter_api_key', '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', 'ai'],
+        ['together_api_key', '', 'ai'],
+        ['openrouter_enabled', 'true', 'ai'],
+        ['together_enabled', 'false', 'ai'],
+        ['ai_default_provider', 'openrouter', 'ai'],
+        ['ai_default_model', 'meta-llama/llama-3.2-1b-instruct:free', 'ai'],
+        ['ai_temperature', '0.7', 'ai'],
+        ['ai_max_tokens', '2048', 'ai'],
+        ['stripe_enabled', 'false', 'payments'],
+        ['max_file_size', '52428800', 'files'], // 50MB
+        ['twin_enabled', 'true', 'features'],
+        ['world_brain_enabled', 'true', 'features'],
+        ['stories_enabled', 'true', 'features'],
+        ['calls_enabled', 'true', 'features'],
+        ['encryption_enabled', 'true', 'security'],
+        ['app_name', 'Hodhod Messenger', 'general'],
+        ['app_version', '1.0.0', 'general']
       ];
 
-      for (const [category, key, value, description] of defaultSettings) {
+      for (const [key, value, category] of defaultSettings) {
         await run(`
-          INSERT OR IGNORE INTO system_settings (category, key, value, description)
-          VALUES (?, ?, ?, ?)
-        `, [category, key, value, description]);
+          INSERT OR REPLACE INTO system_settings (key, value, category) 
+          VALUES (?, ?, ?)
+        `, [key, value, category]);
       }
-      console.log('✅ Comprehensive system settings created');
+      console.log('✅ Default system settings created');
 
       // Verify database integrity
       const userCount = await this.getUserCount();
-      const tableCount = await get("SELECT COUNT(*) as count FROM sqlite_master WHERE type='table'");
-      console.log(`✅ Database initialized successfully:`);
-      console.log(`   - ${userCount} users`);
-      console.log(`   - ${tableCount.count} tables`);
-      console.log(`   - Full feature set enabled`);
+      console.log(`✅ Database initialized successfully with ${userCount} users`);
       
     } catch (error) {
       console.error('❌ Database initialization failed:', error);
@@ -609,20 +460,20 @@ export class Database {
     }
   }
 
-  // Enhanced user methods
   async getUserCount() {
     const get = promisify(this.db.get.bind(this.db));
     const result = await get('SELECT COUNT(*) as count FROM users');
     return result.count;
   }
 
+  // Enhanced user methods
   async createUser(userData) {
     const run = promisify(this.db.run.bind(this.db));
     try {
       console.log('🔄 Creating user:', userData.username);
       const result = await run(`
         INSERT INTO users (
-          username, email, passwordHash, avatar, bio, phoneNumber,
+          username, email, passwordHash, avatar, phoneNumber, bio, 
           theme, language, notificationSettings, privacySettings
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
@@ -630,8 +481,8 @@ export class Database {
         userData.email, 
         userData.passwordHash, 
         userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.username)}&background=1F3934&color=F3C883&size=128`,
-        userData.bio || '',
         userData.phoneNumber || '',
+        userData.bio || '',
         userData.theme || 'light',
         userData.language || 'en',
         JSON.stringify(userData.notificationSettings || {}),
@@ -648,9 +499,7 @@ export class Database {
   async getUserByEmail(email) {
     const get = promisify(this.db.get.bind(this.db));
     try {
-      console.log('🔍 Looking up user by email:', email);
-      const user = await get('SELECT * FROM users WHERE email = ?', [email]);
-      console.log('✅ User lookup result:', user ? 'Found' : 'Not found');
+      const user = await get('SELECT * FROM users WHERE email = ? AND isDeleted = 0', [email]);
       return user;
     } catch (error) {
       console.error('❌ Error getting user by email:', error);
@@ -661,7 +510,7 @@ export class Database {
   async getUserByUsername(username) {
     const get = promisify(this.db.get.bind(this.db));
     try {
-      const user = await get('SELECT * FROM users WHERE username = ?', [username]);
+      const user = await get('SELECT * FROM users WHERE username = ? AND isDeleted = 0', [username]);
       return user;
     } catch (error) {
       console.error('❌ Error getting user by username:', error);
@@ -672,7 +521,7 @@ export class Database {
   async getUserById(id) {
     const get = promisify(this.db.get.bind(this.db));
     try {
-      const user = await get('SELECT * FROM users WHERE id = ?', [id]);
+      const user = await get('SELECT * FROM users WHERE id = ? AND isDeleted = 0', [id]);
       return user;
     } catch (error) {
       console.error('❌ Error getting user by ID:', error);
@@ -684,10 +533,8 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     try {
       await run(`
-        UPDATE users SET 
-          isOnline = ?, 
-          lastSeen = CURRENT_TIMESTAMP,
-          updatedAt = CURRENT_TIMESTAMP
+        UPDATE users 
+        SET isOnline = ?, lastSeen = CURRENT_TIMESTAMP, updatedAt = CURRENT_TIMESTAMP 
         WHERE id = ?
       `, [isOnline ? 1 : 0, userId]);
     } catch (error) {
@@ -705,7 +552,7 @@ export class Database {
       Object.keys(profileData).forEach(key => {
         if (profileData[key] !== undefined) {
           fields.push(`${key} = ?`);
-          values.push(profileData[key]);
+          values.push(typeof profileData[key] === 'object' ? JSON.stringify(profileData[key]) : profileData[key]);
         }
       });
       
@@ -713,10 +560,7 @@ export class Database {
         fields.push('updatedAt = CURRENT_TIMESTAMP');
         values.push(userId);
         
-        await run(
-          `UPDATE users SET ${fields.join(', ')} WHERE id = ?`,
-          values
-        );
+        await run(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
       }
     } catch (error) {
       console.error('❌ Error updating user profile:', error);
@@ -724,169 +568,16 @@ export class Database {
     }
   }
 
-  // Enhanced story methods
-  async createStory(storyData) {
-    const run = promisify(this.db.run.bind(this.db));
-    try {
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 24);
-      
-      const result = await run(`
-        INSERT INTO stories (
-          userId, content, mediaUrl, mediaType, backgroundColor, textColor, 
-          font, duration, allowReplies, allowSharing, music, filters, 
-          stickers, location, expiresAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        storyData.userId,
-        storyData.content || '',
-        storyData.mediaUrl || null,
-        storyData.mediaType || 'text',
-        storyData.backgroundColor || '#1F3934',
-        storyData.textColor || '#FFFFFF',
-        storyData.font || 'default',
-        storyData.duration || 10,
-        storyData.allowReplies !== false ? 1 : 0,
-        storyData.allowSharing !== false ? 1 : 0,
-        storyData.music || null,
-        JSON.stringify(storyData.filters || []),
-        JSON.stringify(storyData.stickers || []),
-        storyData.location || null,
-        expiresAt.toISOString()
-      ]);
-      return result;
-    } catch (error) {
-      console.error('❌ Error creating story:', error);
-      throw error;
-    }
-  }
-
-  async getActiveStories() {
-    const all = promisify(this.db.all.bind(this.db));
-    try {
-      return await all(`
-        SELECT s.*, u.username, u.avatar as userAvatar,
-               (SELECT COUNT(*) FROM story_views sv WHERE sv.storyId = s.id) as viewCount
-        FROM stories s
-        JOIN users u ON s.userId = u.id
-        WHERE s.isActive = 1 AND s.expiresAt > datetime('now')
-        ORDER BY s.createdAt DESC
-      `);
-    } catch (error) {
-      console.error('❌ Error getting active stories:', error);
-      throw error;
-    }
-  }
-
-  async viewStory(storyId, viewerId, viewDuration = 0, reactionType = null) {
+  async updateUserTwin(userId, twinEnabled, twinPersonality) {
     const run = promisify(this.db.run.bind(this.db));
     try {
       await run(`
-        INSERT OR REPLACE INTO story_views (storyId, viewerId, viewDuration, reactionType)
-        VALUES (?, ?, ?, ?)
-      `, [storyId, viewerId, viewDuration, reactionType]);
-      
-      await run(`
-        UPDATE stories SET viewCount = viewCount + 1 WHERE id = ?
-      `, [storyId]);
+        UPDATE users 
+        SET twinEnabled = ?, twinPersonality = ?, updatedAt = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `, [twinEnabled ? 1 : 0, twinPersonality || null, userId]);
     } catch (error) {
-      console.error('❌ Error viewing story:', error);
-      throw error;
-    }
-  }
-
-  // Enhanced message methods
-  async createMessage(messageData) {
-    const run = promisify(this.db.run.bind(this.db));
-    try {
-      const result = await run(`
-        INSERT INTO messages (
-          chatId, senderId, content, type, fileUrl, fileName, fileSize, 
-          fileMimeType, thumbnailUrl, replyToId, forwardedFromId, isPremium, 
-          isEncrypted, animationType, metadata, mentions, hashtags, location, expiresAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        messageData.chatId,
-        messageData.senderId,
-        messageData.content,
-        messageData.type || 'text',
-        messageData.fileUrl || null,
-        messageData.fileName || null,
-        messageData.fileSize || null,
-        messageData.fileMimeType || null,
-        messageData.thumbnailUrl || null,
-        messageData.replyToId || null,
-        messageData.forwardedFromId || null,
-        messageData.isPremium ? 1 : 0,
-        messageData.isEncrypted ? 1 : 0,
-        messageData.animationType || null,
-        JSON.stringify(messageData.metadata || {}),
-        JSON.stringify(messageData.mentions || []),
-        JSON.stringify(messageData.hashtags || []),
-        messageData.location || null,
-        messageData.expiresAt || null
-      ]);
-      
-      // Update chat last activity
-      await run(`
-        UPDATE chats SET lastActivity = CURRENT_TIMESTAMP WHERE id = ?
-      `, [messageData.chatId]);
-      
-      return result;
-    } catch (error) {
-      console.error('❌ Error creating message:', error);
-      throw error;
-    }
-  }
-
-  async getChatMessages(chatId, limit = 50, offset = 0) {
-    const all = promisify(this.db.all.bind(this.db));
-    try {
-      return await all(`
-        SELECT m.*, u.username, u.avatar as userAvatar,
-               rm.content as replyContent, ru.username as replyUsername,
-               fm.content as forwardedContent, fu.username as forwardedUsername
-        FROM messages m
-        JOIN users u ON m.senderId = u.id
-        LEFT JOIN messages rm ON m.replyToId = rm.id
-        LEFT JOIN users ru ON rm.senderId = ru.id
-        LEFT JOIN messages fm ON m.forwardedFromId = fm.id
-        LEFT JOIN users fu ON fm.senderId = fu.id
-        WHERE m.chatId = ? AND m.isDeleted = 0
-        ORDER BY m.timestamp DESC
-        LIMIT ? OFFSET ?
-      `, [chatId, limit, offset]);
-    } catch (error) {
-      console.error('❌ Error getting chat messages:', error);
-      throw error;
-    }
-  }
-
-  async addMessageReaction(messageId, userId, reaction) {
-    const run = promisify(this.db.run.bind(this.db));
-    try {
-      await run(`
-        INSERT OR REPLACE INTO message_reactions (messageId, userId, reaction)
-        VALUES (?, ?, ?)
-      `, [messageId, userId, reaction]);
-    } catch (error) {
-      console.error('❌ Error adding message reaction:', error);
-      throw error;
-    }
-  }
-
-  async getMessageReactions(messageId) {
-    const all = promisify(this.db.all.bind(this.db));
-    try {
-      return await all(`
-        SELECT mr.*, u.username
-        FROM message_reactions mr
-        JOIN users u ON mr.userId = u.id
-        WHERE mr.messageId = ?
-        ORDER BY mr.createdAt DESC
-      `, [messageId]);
-    } catch (error) {
-      console.error('❌ Error getting message reactions:', error);
+      console.error('❌ Error updating user twin:', error);
       throw error;
     }
   }
@@ -897,8 +588,8 @@ export class Database {
     try {
       const result = await run(`
         INSERT INTO chats (
-          name, description, isGroup, avatar, isPremium, wallpaper, 
-          encryptionKey, createdBy
+          name, description, isGroup, avatar, isPremium, 
+          wallpaper, encryptionKey, createdBy
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         chatData.name || null, 
@@ -924,14 +615,12 @@ export class Database {
         SELECT c.*, cp.role as userRole,
           (SELECT COUNT(*) FROM messages m WHERE m.chatId = c.id AND m.isDeleted = 0) as messageCount,
           (SELECT m.content FROM messages m WHERE m.chatId = c.id AND m.isDeleted = 0 ORDER BY m.timestamp DESC LIMIT 1) as lastMessage,
-          (SELECT m.timestamp FROM messages m WHERE m.chatId = c.id AND m.isDeleted = 0 ORDER BY m.timestamp DESC LIMIT 1) as lastMessageTime,
-          (SELECT u.username FROM messages m JOIN users u ON m.senderId = u.id WHERE m.chatId = c.id AND m.isDeleted = 0 ORDER BY m.timestamp DESC LIMIT 1) as lastMessageSender,
-          (SELECT COUNT(*) FROM messages m WHERE m.chatId = c.id AND m.isDeleted = 0 AND JSON_EXTRACT(m.readBy, '$') NOT LIKE '%' || ? || '%') as unreadCount
+          (SELECT m.timestamp FROM messages m WHERE m.chatId = c.id AND m.isDeleted = 0 ORDER BY m.timestamp DESC LIMIT 1) as lastMessageTime
         FROM chats c
         JOIN chat_participants cp ON c.id = cp.chatId
-        WHERE cp.userId = ? AND cp.isActive = 1 AND c.isArchived = 0
-        ORDER BY lastMessageTime DESC
-      `, [userId, userId]);
+        WHERE cp.userId = ?
+        ORDER BY lastMessageTime DESC NULLS LAST
+      `, [userId]);
     } catch (error) {
       console.error('❌ Error getting user chats:', error);
       throw error;
@@ -942,7 +631,7 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     try {
       await run(`
-        INSERT OR REPLACE INTO chat_participants (chatId, userId, role, permissions)
+        INSERT OR IGNORE INTO chat_participants (chatId, userId, role, permissions) 
         VALUES (?, ?, ?, ?)
       `, [chatId, userId, role, JSON.stringify(permissions)]);
     } catch (error) {
@@ -951,21 +640,181 @@ export class Database {
     }
   }
 
-  // Enhanced call methods
+  async getChatParticipants(chatId) {
+    const all = promisify(this.db.all.bind(this.db));
+    try {
+      return await all(`
+        SELECT cp.*, u.username, u.avatar, u.isOnline, u.lastSeen
+        FROM chat_participants cp
+        JOIN users u ON cp.userId = u.id
+        WHERE cp.chatId = ? AND u.isDeleted = 0
+        ORDER BY cp.joinedAt
+      `, [chatId]);
+    } catch (error) {
+      console.error('❌ Error getting chat participants:', error);
+      throw error;
+    }
+  }
+
+  // Enhanced message methods
+  async createMessage(messageData) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      const result = await run(`
+        INSERT INTO messages (
+          chatId, senderId, content, type, fileUrl, fileName, fileSize, fileMimeType,
+          replyToId, forwardedFromId, isPremium, animationType, mentions, hashtags,
+          location, expiresAt, metadata
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        messageData.chatId,
+        messageData.senderId,
+        messageData.content,
+        messageData.type || 'text',
+        messageData.fileUrl || null,
+        messageData.fileName || null,
+        messageData.fileSize || null,
+        messageData.fileMimeType || null,
+        messageData.replyToId || null,
+        messageData.forwardedFromId || null,
+        messageData.isPremium ? 1 : 0,
+        messageData.animationType || null,
+        JSON.stringify(messageData.mentions || []),
+        JSON.stringify(messageData.hashtags || []),
+        messageData.location || null,
+        messageData.expiresAt || null,
+        JSON.stringify(messageData.metadata || {})
+      ]);
+      return result;
+    } catch (error) {
+      console.error('❌ Error creating message:', error);
+      throw error;
+    }
+  }
+
+  async getChatMessages(chatId, limit = 50, offset = 0) {
+    const all = promisify(this.db.all.bind(this.db));
+    try {
+      return await all(`
+        SELECT m.*, u.username, u.avatar as userAvatar
+        FROM messages m
+        JOIN users u ON m.senderId = u.id
+        WHERE m.chatId = ? AND m.isDeleted = 0
+        ORDER BY m.timestamp DESC
+        LIMIT ? OFFSET ?
+      `, [chatId, limit, offset]);
+    } catch (error) {
+      console.error('❌ Error getting chat messages:', error);
+      throw error;
+    }
+  }
+
+  async getMessageById(messageId) {
+    const get = promisify(this.db.get.bind(this.db));
+    try {
+      return await get(`
+        SELECT m.*, u.username, u.avatar as userAvatar
+        FROM messages m
+        JOIN users u ON m.senderId = u.id
+        WHERE m.id = ? AND m.isDeleted = 0
+      `, [messageId]);
+    } catch (error) {
+      console.error('❌ Error getting message by ID:', error);
+      throw error;
+    }
+  }
+
+  async editMessage(messageId, content) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      await run(`
+        UPDATE messages 
+        SET content = ?, isEdited = 1, editedAt = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `, [content, messageId]);
+    } catch (error) {
+      console.error('❌ Error editing message:', error);
+      throw error;
+    }
+  }
+
+  async deleteMessage(messageId) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      await run(`
+        UPDATE messages 
+        SET isDeleted = 1, deletedAt = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `, [messageId]);
+    } catch (error) {
+      console.error('❌ Error deleting message:', error);
+      throw error;
+    }
+  }
+
+  async searchMessages(userId, query, limit = 20) {
+    const all = promisify(this.db.all.bind(this.db));
+    try {
+      return await all(`
+        SELECT m.*, u.username, u.avatar as userAvatar, c.name as chatName
+        FROM messages m
+        JOIN users u ON m.senderId = u.id
+        JOIN chats c ON m.chatId = c.id
+        JOIN chat_participants cp ON c.id = cp.chatId
+        WHERE cp.userId = ? AND m.content LIKE ? AND m.isDeleted = 0
+        ORDER BY m.timestamp DESC
+        LIMIT ?
+      `, [userId, `%${query}%`, limit]);
+    } catch (error) {
+      console.error('❌ Error searching messages:', error);
+      throw error;
+    }
+  }
+
+  // Message reactions
+  async addMessageReaction(messageId, userId, reaction) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      await run(`
+        INSERT OR REPLACE INTO message_reactions (messageId, userId, reaction) 
+        VALUES (?, ?, ?)
+      `, [messageId, userId, reaction]);
+    } catch (error) {
+      console.error('❌ Error adding message reaction:', error);
+      throw error;
+    }
+  }
+
+  async getMessageReactions(messageId) {
+    const all = promisify(this.db.all.bind(this.db));
+    try {
+      return await all(`
+        SELECT mr.*, u.username
+        FROM message_reactions mr
+        JOIN users u ON mr.userId = u.id
+        WHERE mr.messageId = ?
+        ORDER BY mr.createdAt
+      `, [messageId]);
+    } catch (error) {
+      console.error('❌ Error getting message reactions:', error);
+      throw error;
+    }
+  }
+
+  // Call methods
   async createCall(callData) {
     const run = promisify(this.db.run.bind(this.db));
     try {
       const result = await run(`
         INSERT INTO calls (
-          chatId, initiatorId, participants, type, status, startedAt, isRecorded
-        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+          chatId, initiatorId, participants, type, status, startedAt
+        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `, [
         callData.chatId, 
         callData.initiatorId, 
         JSON.stringify(callData.participants || []), 
         callData.type || 'voice', 
-        'active',
-        callData.isRecorded ? 1 : 0
+        'active'
       ]);
       return result;
     } catch (error) {
@@ -974,63 +823,35 @@ export class Database {
     }
   }
 
-  async endCall(callId, duration, quality = 'good', recordingUrl = null) {
+  async endCall(callId, duration, quality = null, recordingUrl = null) {
     const run = promisify(this.db.run.bind(this.db));
     try {
       await run(`
-        UPDATE calls SET 
-          status = ?, 
-          endedAt = CURRENT_TIMESTAMP, 
-          duration = ?, 
-          quality = ?,
-          recordingUrl = ?
+        UPDATE calls 
+        SET status = 'ended', endedAt = CURRENT_TIMESTAMP, duration = ?, quality = ?, recordingUrl = ?
         WHERE id = ?
-      `, ['ended', duration, quality, recordingUrl, callId]);
+      `, [duration, quality, recordingUrl, callId]);
     } catch (error) {
       console.error('❌ Error ending call:', error);
       throw error;
     }
   }
 
-  async getCallHistory(userId, limit = 20) {
-    const all = promisify(this.db.all.bind(this.db));
-    try {
-      return await all(`
-        SELECT c.*, u.username as initiatorName, u.avatar as initiatorAvatar,
-               ch.name as chatName
-        FROM calls c
-        JOIN users u ON c.initiatorId = u.id
-        LEFT JOIN chats ch ON c.chatId = ch.id
-        WHERE c.participants LIKE ? OR c.initiatorId = ?
-        ORDER BY c.startedAt DESC
-        LIMIT ?
-      `, [`%${userId}%`, userId, limit]);
-    } catch (error) {
-      console.error('❌ Error getting call history:', error);
-      throw error;
-    }
-  }
-
-  // Future messages with enhanced features
+  // Future messages
   async createFutureMessage(messageData) {
     const run = promisify(this.db.run.bind(this.db));
     try {
       await run(`
         INSERT INTO future_messages (
-          chatId, senderId, content, type, fileUrl, scheduledFor, timezone,
-          repeatType, repeatInterval, maxRepeats
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          chatId, senderId, content, scheduledFor, repeatType, repeatInterval
+        ) VALUES (?, ?, ?, ?, ?, ?)
       `, [
-        messageData.chatId,
-        messageData.senderId,
-        messageData.content,
-        messageData.type || 'text',
-        messageData.fileUrl || null,
+        messageData.chatId, 
+        messageData.senderId, 
+        messageData.content, 
         messageData.scheduledFor,
-        messageData.timezone || 'UTC',
         messageData.repeatType || null,
-        messageData.repeatInterval || null,
-        messageData.maxRepeats || null
+        messageData.repeatInterval || null
       ]);
     } catch (error) {
       console.error('❌ Error creating future message:', error);
@@ -1043,10 +864,7 @@ export class Database {
     try {
       return await all(`
         SELECT * FROM future_messages 
-        WHERE scheduledFor <= datetime('now') 
-        AND sent = 0 
-        AND cancelled = 0
-        AND (maxRepeats IS NULL OR currentRepeats < maxRepeats)
+        WHERE scheduledFor <= datetime('now') AND sent = 0
       `);
     } catch (error) {
       console.error('❌ Error getting due messages:', error);
@@ -1057,117 +875,29 @@ export class Database {
   async markFutureMessageSent(id) {
     const run = promisify(this.db.run.bind(this.db));
     try {
-      await run(`
-        UPDATE future_messages SET 
-          sent = 1, 
-          sentAt = CURRENT_TIMESTAMP,
-          currentRepeats = currentRepeats + 1
-        WHERE id = ?
-      `, [id]);
+      await run('UPDATE future_messages SET sent = 1 WHERE id = ?', [id]);
     } catch (error) {
       console.error('❌ Error marking future message sent:', error);
       throw error;
     }
   }
 
-  // World Brain enhanced methods
-  async createWorldBrainQuestion(question, askedBy, description = null, category = null, tags = []) {
-    const run = promisify(this.db.run.bind(this.db));
-    try {
-      const result = await run(`
-        INSERT INTO world_brain_questions (
-          question, description, category, tags, askedBy
-        ) VALUES (?, ?, ?, ?, ?)
-      `, [question, description, category, JSON.stringify(tags), askedBy]);
-      return result;
-    } catch (error) {
-      console.error('❌ Error creating world brain question:', error);
-      throw error;
-    }
-  }
-
-  async getWorldBrainQuestions() {
-    const all = promisify(this.db.all.bind(this.db));
-    try {
-      return await all(`
-        SELECT q.*, u.username as askedByUsername,
-          (SELECT COUNT(*) FROM world_brain_answers a WHERE a.questionId = q.id) as answerCount
-        FROM world_brain_questions q
-        JOIN users u ON q.askedBy = u.id
-        ORDER BY q.priority DESC, q.createdAt DESC
-      `);
-    } catch (error) {
-      console.error('❌ Error getting world brain questions:', error);
-      throw error;
-    }
-  }
-
-  async addWorldBrainAnswer(questionId, userId, answer, sources = [], confidence = 50) {
-    const run = promisify(this.db.run.bind(this.db));
-    try {
-      await run(`
-        INSERT INTO world_brain_answers (
-          questionId, userId, answer, sources, confidence
-        ) VALUES (?, ?, ?, ?, ?)
-      `, [questionId, userId, answer, JSON.stringify(sources), confidence]);
-    } catch (error) {
-      console.error('❌ Error adding world brain answer:', error);
-      throw error;
-    }
-  }
-
-  async getQuestionAnswers(questionId) {
-    const all = promisify(this.db.all.bind(this.db));
-    try {
-      return await all(`
-        SELECT a.*, u.username, u.avatar,
-               v.username as verifierName
-        FROM world_brain_answers a
-        JOIN users u ON a.userId = u.id
-        LEFT JOIN users v ON a.verifiedBy = v.id
-        WHERE a.questionId = ?
-        ORDER BY a.isVerified DESC, a.votes DESC, a.createdAt DESC
-      `, [questionId]);
-    } catch (error) {
-      console.error('❌ Error getting question answers:', error);
-      throw error;
-    }
-  }
-
-  async voteAnswer(answerId, vote) {
-    const run = promisify(this.db.run.bind(this.db));
-    try {
-      if (vote > 0) {
-        await run('UPDATE world_brain_answers SET upvotes = upvotes + 1, votes = votes + 1 WHERE id = ?', [answerId]);
-      } else {
-        await run('UPDATE world_brain_answers SET downvotes = downvotes + 1, votes = votes - 1 WHERE id = ?', [answerId]);
-      }
-    } catch (error) {
-      console.error('❌ Error voting answer:', error);
-      throw error;
-    }
-  }
-
-  // AGI Companion enhanced methods
-  async saveAGIConversation(userId, message, response, context = {}, mood = null, topics = [], sentiment = null, model = null, tokens = 0) {
+  // AGI Companion
+  async saveAGIConversation(userId, message, response, context = {}, model = null, provider = null) {
     const run = promisify(this.db.run.bind(this.db));
     try {
       await run(`
         INSERT INTO agi_conversations (
-          userId, sessionId, message, response, context, mood, topics, 
-          sentiment, model, tokens
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          userId, sessionId, message, response, context, model, provider
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
       `, [
         userId, 
-        context.sessionId || 'default',
+        `session_${userId}_${Date.now()}`, 
         message, 
         response, 
         JSON.stringify(context),
-        mood,
-        JSON.stringify(topics),
-        sentiment,
         model,
-        tokens
+        provider
       ]);
     } catch (error) {
       console.error('❌ Error saving AGI conversation:', error);
@@ -1190,134 +920,128 @@ export class Database {
     }
   }
 
-  // Settings methods
-  async getSetting(category, key) {
-    const get = promisify(this.db.get.bind(this.db));
-    try {
-      const result = await get(`
-        SELECT value FROM system_settings 
-        WHERE category = ? AND key = ?
-      `, [category, key]);
-      return result?.value;
-    } catch (error) {
-      console.error('❌ Error getting setting:', error);
-      throw error;
-    }
-  }
-
-  async setSetting(category, key, value, description = null) {
+  // World Brain methods
+  async createWorldBrainQuestion(question, askedBy, category = null, tags = []) {
     const run = promisify(this.db.run.bind(this.db));
     try {
-      await run(`
-        INSERT OR REPLACE INTO system_settings (category, key, value, description, updatedAt)
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [category, key, value, description]);
+      const result = await run(`
+        INSERT INTO world_brain_questions (question, askedBy, category, tags) 
+        VALUES (?, ?, ?, ?)
+      `, [question, askedBy, category, JSON.stringify(tags)]);
+      return result;
     } catch (error) {
-      console.error('❌ Error setting setting:', error);
+      console.error('❌ Error creating world brain question:', error);
       throw error;
     }
   }
 
-  async getUserSetting(userId, category, key, defaultValue = null) {
-    const get = promisify(this.db.get.bind(this.db));
-    try {
-      const result = await get(`
-        SELECT settingValue FROM user_settings 
-        WHERE userId = ? AND category = ? AND settingKey = ?
-      `, [userId, category, key]);
-      return result ? result.settingValue : defaultValue;
-    } catch (error) {
-      console.error('❌ Error getting user setting:', error);
-      return defaultValue;
-    }
-  }
-
-  async setUserSetting(userId, category, key, value, isEncrypted = false) {
-    const run = promisify(this.db.run.bind(this.db));
-    try {
-      await run(`
-        INSERT OR REPLACE INTO user_settings (
-          userId, category, settingKey, settingValue, isEncrypted, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [userId, category, key, value, isEncrypted ? 1 : 0]);
-    } catch (error) {
-      console.error('❌ Error setting user setting:', error);
-      throw error;
-    }
-  }
-
-  // Admin methods
-  async getAllUsers() {
+  async getWorldBrainQuestions() {
     const all = promisify(this.db.all.bind(this.db));
     try {
       return await all(`
-        SELECT id, username, email, role, isOnline, lastSeen, status, bio, 
-               phoneNumber, emailVerified, phoneVerified, createdAt, updatedAt 
-        FROM users 
-        ORDER BY createdAt DESC
+        SELECT q.*, u.username as askedByUsername,
+          (SELECT COUNT(*) FROM world_brain_answers a WHERE a.questionId = q.id) as answerCount
+        FROM world_brain_questions q
+        JOIN users u ON q.askedBy = u.id
+        ORDER BY q.createdAt DESC
       `);
     } catch (error) {
-      console.error('❌ Error getting all users:', error);
+      console.error('❌ Error getting world brain questions:', error);
       throw error;
     }
   }
 
-  async deleteUser(userId) {
+  async addWorldBrainAnswer(questionId, userId, answer, confidence = 0) {
     const run = promisify(this.db.run.bind(this.db));
     try {
-      // Soft delete - mark as deleted but keep data for integrity
       await run(`
-        UPDATE users SET 
-          isOnline = 0,
-          status = 'deleted',
-          updatedAt = CURRENT_TIMESTAMP
+        INSERT INTO world_brain_answers (questionId, userId, answer, confidence) 
+        VALUES (?, ?, ?, ?)
+      `, [questionId, userId, answer, confidence]);
+    } catch (error) {
+      console.error('❌ Error adding world brain answer:', error);
+      throw error;
+    }
+  }
+
+  async getQuestionAnswers(questionId) {
+    const all = promisify(this.db.all.bind(this.db));
+    try {
+      return await all(`
+        SELECT a.*, u.username
+        FROM world_brain_answers a
+        JOIN users u ON a.userId = u.id
+        WHERE a.questionId = ?
+        ORDER BY a.votes DESC, a.createdAt DESC
+      `, [questionId]);
+    } catch (error) {
+      console.error('❌ Error getting question answers:', error);
+      throw error;
+    }
+  }
+
+  async voteAnswer(answerId, vote) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      await run(`
+        UPDATE world_brain_answers 
+        SET votes = votes + ?, updatedAt = CURRENT_TIMESTAMP 
         WHERE id = ?
+      `, [vote, answerId]);
+    } catch (error) {
+      console.error('❌ Error voting answer:', error);
+      throw error;
+    }
+  }
+
+  // Stories methods
+  async createStory(userId, content, mediaUrl = null, mediaType = null, backgroundColor = null, textColor = null) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+      const result = await run(`
+        INSERT INTO stories (
+          userId, content, mediaUrl, mediaType, backgroundColor, textColor, expiresAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [userId, content, mediaUrl, mediaType, backgroundColor, textColor, expiresAt]);
+      return result;
+    } catch (error) {
+      console.error('❌ Error creating story:', error);
+      throw error;
+    }
+  }
+
+  async getUserStories(userId) {
+    const all = promisify(this.db.all.bind(this.db));
+    try {
+      return await all(`
+        SELECT s.*, u.username, u.avatar
+        FROM stories s
+        JOIN users u ON s.userId = u.id
+        WHERE s.userId = ? AND s.expiresAt > datetime('now')
+        ORDER BY s.createdAt DESC
       `, [userId]);
     } catch (error) {
-      console.error('❌ Error deleting user:', error);
+      console.error('❌ Error getting user stories:', error);
       throw error;
     }
   }
 
-  async updateUserRole(userId, role) {
+  async viewStory(storyId, viewerId) {
     const run = promisify(this.db.run.bind(this.db));
     try {
       await run(`
-        UPDATE users SET 
-          role = ?, 
-          updatedAt = CURRENT_TIMESTAMP 
-        WHERE id = ?
-      `, [role, userId]);
-    } catch (error) {
-      console.error('❌ Error updating user role:', error);
-      throw error;
-    }
-  }
-
-  async getSystemStats() {
-    const get = promisify(this.db.get.bind(this.db));
-    try {
-      const userCount = await get('SELECT COUNT(*) as count FROM users WHERE status != "deleted"');
-      const messageCount = await get('SELECT COUNT(*) as count FROM messages WHERE isDeleted = 0');
-      const chatCount = await get('SELECT COUNT(*) as count FROM chats WHERE isArchived = 0');
-      const onlineUsers = await get('SELECT COUNT(*) as count FROM users WHERE isOnline = 1');
-      const storyCount = await get('SELECT COUNT(*) as count FROM stories WHERE isActive = 1');
-      const callCount = await get('SELECT COUNT(*) as count FROM calls WHERE status = "ended"');
-      const questionCount = await get('SELECT COUNT(*) as count FROM world_brain_questions');
-      const answerCount = await get('SELECT COUNT(*) as count FROM world_brain_answers');
+        INSERT OR IGNORE INTO story_views (storyId, viewerId) 
+        VALUES (?, ?)
+      `, [storyId, viewerId]);
       
-      return {
-        users: userCount.count,
-        messages: messageCount.count,
-        chats: chatCount.count,
-        onlineUsers: onlineUsers.count,
-        stories: storyCount.count,
-        calls: callCount.count,
-        questions: questionCount.count,
-        answers: answerCount.count
-      };
+      await run(`
+        UPDATE stories 
+        SET views = views + 1 
+        WHERE id = ?
+      `, [storyId]);
     } catch (error) {
-      console.error('❌ Error getting system stats:', error);
+      console.error('❌ Error viewing story:', error);
       throw error;
     }
   }
@@ -1327,7 +1051,7 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     try {
       await run(`
-        INSERT INTO notifications (userId, type, title, message, data)
+        INSERT INTO notifications (userId, type, title, message, data) 
         VALUES (?, ?, ?, ?, ?)
       `, [userId, type, title, message, JSON.stringify(data)]);
     } catch (error) {
@@ -1336,7 +1060,7 @@ export class Database {
     }
   }
 
-  async getUserNotifications(userId, limit = 50) {
+  async getUserNotifications(userId, limit = 20) {
     const all = promisify(this.db.all.bind(this.db));
     try {
       return await all(`
@@ -1355,9 +1079,8 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     try {
       await run(`
-        UPDATE notifications SET 
-          isRead = 1, 
-          readAt = CURRENT_TIMESTAMP 
+        UPDATE notifications 
+        SET isRead = 1 
         WHERE id = ?
       `, [notificationId]);
     } catch (error) {
@@ -1366,136 +1089,18 @@ export class Database {
     }
   }
 
-  // Analytics methods
-  async logEvent(userId, eventType, eventData = {}, sessionId = null) {
-    const run = promisify(this.db.run.bind(this.db));
-    try {
-      await run(`
-        INSERT INTO analytics_events (userId, eventType, eventData, sessionId)
-        VALUES (?, ?, ?, ?)
-      `, [userId, eventType, JSON.stringify(eventData), sessionId]);
-    } catch (error) {
-      console.error('❌ Error logging event:', error);
-      throw error;
-    }
-  }
-
-  // Search methods
-  async searchMessages(userId, query, limit = 20) {
-    const all = promisify(this.db.all.bind(this.db));
-    try {
-      return await all(`
-        SELECT m.*, u.username, c.name as chatName
-        FROM messages m
-        JOIN users u ON m.senderId = u.id
-        JOIN chats c ON m.chatId = c.id
-        JOIN chat_participants cp ON m.chatId = cp.chatId
-        WHERE cp.userId = ? 
-        AND cp.isActive = 1
-        AND m.isDeleted = 0
-        AND (m.content LIKE ? OR m.fileName LIKE ?)
-        ORDER BY m.timestamp DESC
-        LIMIT ?
-      `, [userId, `%${query}%`, `%${query}%`, limit]);
-    } catch (error) {
-      console.error('❌ Error searching messages:', error);
-      throw error;
-    }
-  }
-
-  async searchUsers(query, limit = 10) {
-    const all = promisify(this.db.all.bind(this.db));
-    try {
-      return await all(`
-        SELECT id, username, email, avatar, bio, status
-        FROM users 
-        WHERE status != 'deleted'
-        AND (username LIKE ? OR email LIKE ? OR bio LIKE ?)
-        ORDER BY username
-        LIMIT ?
-      `, [`%${query}%`, `%${query}%`, `%${query}%`, limit]);
-    } catch (error) {
-      console.error('❌ Error searching users:', error);
-      throw error;
-    }
-  }
-
-  // Contact methods
-  async addContact(userId, contactUserId, displayName = null, relationship = 'contact') {
-    const run = promisify(this.db.run.bind(this.db));
-    try {
-      await run(`
-        INSERT OR REPLACE INTO contacts (
-          userId, contactUserId, displayName, relationship
-        ) VALUES (?, ?, ?, ?)
-      `, [userId, contactUserId, displayName, relationship]);
-    } catch (error) {
-      console.error('❌ Error adding contact:', error);
-      throw error;
-    }
-  }
-
-  async getUserContacts(userId) {
-    const all = promisify(this.db.all.bind(this.db));
-    try {
-      return await all(`
-        SELECT c.*, u.username, u.avatar, u.status, u.isOnline, u.lastSeen
-        FROM contacts c
-        JOIN users u ON c.contactUserId = u.id
-        WHERE c.userId = ? AND c.isBlocked = 0
-        ORDER BY c.isFavorite DESC, u.username
-      `, [userId]);
-    } catch (error) {
-      console.error('❌ Error getting user contacts:', error);
-      throw error;
-    }
-  }
-
   // Session management
   async createSession(userId, sessionToken, deviceInfo, ipAddress, userAgent) {
     const run = promisify(this.db.run.bind(this.db));
     try {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
-
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
       await run(`
         INSERT INTO user_sessions (
           userId, sessionToken, deviceInfo, ipAddress, userAgent, expiresAt
         ) VALUES (?, ?, ?, ?, ?, ?)
-      `, [userId, sessionToken, deviceInfo, ipAddress, userAgent, expiresAt.toISOString()]);
+      `, [userId, sessionToken, deviceInfo, ipAddress, userAgent, expiresAt]);
     } catch (error) {
       console.error('❌ Error creating session:', error);
-      throw error;
-    }
-  }
-
-  async validateSession(sessionToken) {
-    const get = promisify(this.db.get.bind(this.db));
-    try {
-      return await get(`
-        SELECT s.*, u.username, u.role
-        FROM user_sessions s
-        JOIN users u ON s.userId = u.id
-        WHERE s.sessionToken = ? 
-        AND s.isActive = 1 
-        AND s.expiresAt > datetime('now')
-      `, [sessionToken]);
-    } catch (error) {
-      console.error('❌ Error validating session:', error);
-      throw error;
-    }
-  }
-
-  async updateSessionActivity(sessionToken) {
-    const run = promisify(this.db.run.bind(this.db));
-    try {
-      await run(`
-        UPDATE user_sessions SET 
-          lastActivity = CURRENT_TIMESTAMP 
-        WHERE sessionToken = ?
-      `, [sessionToken]);
-    } catch (error) {
-      console.error('❌ Error updating session activity:', error);
       throw error;
     }
   }
@@ -1504,12 +1109,171 @@ export class Database {
     const run = promisify(this.db.run.bind(this.db));
     try {
       await run(`
-        UPDATE user_sessions SET 
-          isActive = 0 
+        UPDATE user_sessions 
+        SET isActive = 0 
         WHERE sessionToken = ?
       `, [sessionToken]);
     } catch (error) {
       console.error('❌ Error revoking session:', error);
+      throw error;
+    }
+  }
+
+  // Event logging
+  async logEvent(userId, eventType, eventData = {}, ipAddress = null, userAgent = null) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      await run(`
+        INSERT INTO event_logs (userId, eventType, eventData, ipAddress, userAgent) 
+        VALUES (?, ?, ?, ?, ?)
+      `, [userId, eventType, JSON.stringify(eventData), ipAddress, userAgent]);
+    } catch (error) {
+      console.error('❌ Error logging event:', error);
+      // Don't throw error for logging failures
+    }
+  }
+
+  // Settings methods
+  async getSetting(key) {
+    const get = promisify(this.db.get.bind(this.db));
+    try {
+      const result = await get('SELECT value FROM system_settings WHERE key = ?', [key]);
+      return result?.value;
+    } catch (error) {
+      console.error('❌ Error getting setting:', error);
+      throw error;
+    }
+  }
+
+  async setSetting(key, value, category = 'general') {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      await run(`
+        INSERT OR REPLACE INTO system_settings (key, value, category, updatedAt) 
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      `, [key, value, category]);
+    } catch (error) {
+      console.error('❌ Error setting setting:', error);
+      throw error;
+    }
+  }
+
+  async getUserSetting(userId, category, key, defaultValue = null) {
+    const get = promisify(this.db.get.bind(this.db));
+    try {
+      const result = await get(`
+        SELECT value FROM system_settings 
+        WHERE key = ?
+      `, [`user_${userId}_${category}_${key}`]);
+      return result?.value || defaultValue;
+    } catch (error) {
+      console.error('❌ Error getting user setting:', error);
+      return defaultValue;
+    }
+  }
+
+  // Admin methods
+  async getAllUsers() {
+    const all = promisify(this.db.all.bind(this.db));
+    try {
+      return await all(`
+        SELECT id, username, email, role, isOnline, lastSeen, createdAt, status
+        FROM users 
+        WHERE isDeleted = 0
+        ORDER BY createdAt DESC
+      `);
+    } catch (error) {
+      console.error('❌ Error getting all users:', error);
+      throw error;
+    }
+  }
+
+  async deleteUser(userId) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      await run(`
+        UPDATE users 
+        SET isDeleted = 1, deletedAt = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `, [userId]);
+    } catch (error) {
+      console.error('❌ Error deleting user:', error);
+      throw error;
+    }
+  }
+
+  async updateUserRole(userId, role) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      await run(`
+        UPDATE users 
+        SET role = ?, updatedAt = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `, [role, userId]);
+    } catch (error) {
+      console.error('❌ Error updating user role:', error);
+      throw error;
+    }
+  }
+
+  async getSystemStats() {
+    const get = promisify(this.db.get.bind(this.db));
+    try {
+      const userCount = await get('SELECT COUNT(*) as count FROM users WHERE isDeleted = 0');
+      const messageCount = await get('SELECT COUNT(*) as count FROM messages WHERE isDeleted = 0');
+      const chatCount = await get('SELECT COUNT(*) as count FROM chats');
+      const onlineUsers = await get('SELECT COUNT(*) as count FROM users WHERE isOnline = 1 AND isDeleted = 0');
+      const callCount = await get('SELECT COUNT(*) as count FROM calls WHERE status = "ended"');
+      const storyCount = await get('SELECT COUNT(*) as count FROM stories WHERE expiresAt > datetime("now")');
+      
+      return {
+        users: userCount.count,
+        messages: messageCount.count,
+        chats: chatCount.count,
+        onlineUsers: onlineUsers.count,
+        calls: callCount.count,
+        activeStories: storyCount.count
+      };
+    } catch (error) {
+      console.error('❌ Error getting system stats:', error);
+      throw error;
+    }
+  }
+
+  // Transaction methods
+  async createTransaction(transactionData) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      const result = await run(`
+        INSERT INTO transactions (
+          userId, amount, currency, status, stripePaymentId, description, metadata
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+        transactionData.userId, 
+        transactionData.amount, 
+        transactionData.currency || 'USD', 
+        transactionData.status || 'pending', 
+        transactionData.stripePaymentId || null, 
+        transactionData.description || null,
+        JSON.stringify(transactionData.metadata || {})
+      ]);
+      return result;
+    } catch (error) {
+      console.error('❌ Error creating transaction:', error);
+      throw error;
+    }
+  }
+
+  async updateTransaction(transactionId, status) {
+    const run = promisify(this.db.run.bind(this.db));
+    try {
+      await run(`
+        UPDATE transactions 
+        SET status = ?, updatedAt = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `, [status, transactionId]);
+    } catch (error) {
+      console.error('❌ Error updating transaction:', error);
       throw error;
     }
   }

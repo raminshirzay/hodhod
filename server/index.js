@@ -57,7 +57,7 @@ app.use(express.json({
     try {
       JSON.parse(buf);
     } catch (e) {
-      console.error('Invalid JSON received:', e.message);
+      console.error('❌ Invalid JSON received:', e.message);
       res.status(400).json({ error: 'Invalid JSON' });
       return;
     }
@@ -103,6 +103,7 @@ async function startServer() {
     try {
       const testUser = await db.getUserById(1);
       console.log('✅ Database connection test successful');
+      console.log('✅ Static admin user ready: admin@hodhod.com / admin123');
     } catch (dbError) {
       console.error('❌ Database connection test failed:', dbError);
       throw dbError;
@@ -116,7 +117,7 @@ async function startServer() {
     // Enhanced middleware for request logging
     app.use((req, res, next) => {
       console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-      if (req.body && Object.keys(req.body).length > 0) {
+      if (req.body && Object.keys(req.body).length > 0 && !req.url.includes('/login')) {
         console.log('Body:', JSON.stringify(req.body, null, 2));
       }
       next();
@@ -124,7 +125,7 @@ async function startServer() {
 
     // Routes with enhanced error handling
     app.use('/api/auth', (req, res, next) => {
-      console.log('Auth route accessed:', req.method, req.url);
+      console.log('🔐 Auth route accessed:', req.method, req.url);
       next();
     }, authRouter(db));
 
@@ -151,19 +152,22 @@ async function startServer() {
 
     // Enhanced health check
     app.get('/api/health', async (req, res) => {
-      console.log('Health check requested');
+      console.log('🏥 Health check requested');
       try {
         // Test database
         await db.getUserById(1);
+        const stats = await db.getSystemStats();
         res.json({ 
           status: 'ok', 
           timestamp: new Date().toISOString(),
           message: 'Hodhod Messenger API is running',
           database: 'connected',
-          version: '1.0.0'
+          version: '1.0.0',
+          stats,
+          adminUser: 'admin@hodhod.com / admin123'
         });
       } catch (error) {
-        console.error('Health check failed:', error);
+        console.error('❌ Health check failed:', error);
         res.status(500).json({
           status: 'error',
           timestamp: new Date().toISOString(),
@@ -175,16 +179,24 @@ async function startServer() {
 
     // Test route with database check
     app.get('/api/test', async (req, res) => {
-      console.log('Test route accessed');
+      console.log('🧪 Test route accessed');
       try {
         const stats = await db.getSystemStats();
+        const adminUser = await db.getUserById(1);
         res.json({ 
           message: 'Server is working!',
           database: 'connected',
-          stats
+          stats,
+          adminUser: {
+            id: adminUser.id,
+            username: adminUser.username,
+            email: adminUser.email,
+            role: adminUser.role
+          },
+          loginInfo: 'Use admin@hodhod.com / admin123 to login'
         });
       } catch (error) {
-        console.error('Test route error:', error);
+        console.error('❌ Test route error:', error);
         res.status(500).json({
           message: 'Server error',
           error: error.message
@@ -200,7 +212,11 @@ async function startServer() {
           message: 'API route not found',
           path: req.originalUrl,
           method: req.method,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          availableRoutes: [
+            '/api/auth', '/api/messages', '/api/ai', '/api/admin', 
+            '/api/worldbrain', '/api/agi', '/api/health', '/api/test'
+          ]
         });
       }
       
@@ -269,18 +285,18 @@ async function startServer() {
               metadata: { originalScheduledTime: message.scheduledFor }
             });
           } catch (messageError) {
-            console.error('Error processing individual future message:', messageError);
+            console.error('❌ Error processing individual future message:', messageError);
           }
         }
       } catch (error) {
-        console.error('Error processing future messages:', error);
+        console.error('❌ Error processing future messages:', error);
       }
     });
 
     const PORT = process.env.PORT || 3001;
     
     server.listen(PORT, '0.0.0.0', () => {
-      console.log('='.repeat(50));
+      console.log('='.repeat(60));
       console.log(`🚀 Hodhod Messenger server running on port ${PORT}`);
       console.log(`📊 Admin panel: http://localhost:${PORT}/admin`);
       console.log(`🧠 World Brain: http://localhost:${PORT}/worldbrain`);
@@ -288,8 +304,14 @@ async function startServer() {
       console.log(`🔗 API Health: http://localhost:${PORT}/api/health`);
       console.log(`🔗 API Test: http://localhost:${PORT}/api/test`);
       console.log(`🔗 Auth Test: http://localhost:${PORT}/api/auth/test`);
+      console.log('');
+      console.log('🔐 STATIC ADMIN LOGIN:');
+      console.log('   Email: admin@hodhod.com');
+      console.log('   Password: admin123');
+      console.log('   Role: admin (full access)');
+      console.log('');
       console.log('✅ Server is ready to accept connections');
-      console.log('='.repeat(50));
+      console.log('='.repeat(60));
     });
 
   } catch (error) {

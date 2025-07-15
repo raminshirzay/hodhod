@@ -27,8 +27,8 @@ export const LoginPage: React.FC = () => {
   };
 
   const handleAdminLogin = () => {
-    setEmail('admin');
-    setPassword('123');
+    setEmail('admin@hodhod.com');
+    setPassword('admin123');
   };
 
   return (
@@ -127,7 +127,7 @@ export const LoginPage: React.FC = () => {
                 onClick={handleAdminLogin}
                 className="bg-gray-700 text-white px-4 py-2 rounded-xl hover:bg-gray-600 transition-colors text-sm"
               >
-                Admin Login (admin / 123)
+                Admin Login (admin@hodhod.com / admin123)
               </button>
             </div>
           </div>
